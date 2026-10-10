@@ -67,7 +67,7 @@ def main():
             check("規則檔在 .claude/rules", (p / ".claude/rules/dispatch-and-verify.md").exists())
             check("session-log-kit 在 .claude 底下", (p / ".claude/session-log-kit/sessionstart_log.ps1").exists())
             s = settings(p)
-            check("settings 有 5 個 hook", our_count(s) == 5, json.dumps(s, ensure_ascii=False))
+            check("settings 有 6 個 hook", our_count(s) == 6, json.dumps(s, ensure_ascii=False))
             check("SessionStart 指到 .claude/session-log-kit",
                   "/.claude/session-log-kit/sessionstart_log.ps1" in json.dumps(s))
             cm = (p / "CLAUDE.md").read_text(encoding="utf-8")
@@ -87,7 +87,7 @@ def main():
             code, out = run(p, "--session-log")
             after = snapshot(p)
             check("重跑成功", code == 0, out)
-            check("重跑後 settings 仍是 5 個 hook", our_count(settings(p)) == 5)
+            check("重跑後 settings 仍是 6 個 hook", our_count(settings(p)) == 6)
             check("重跑後 CLAUDE.md 接力說明只有一段",
                   (p / "CLAUDE.md").read_text(encoding="utf-8").count("claude-workflow-template:start") == 1)
             check("重跑不改任何檔案、不產生備份", before == after,
@@ -109,7 +109,7 @@ def main():
         s = settings(p)
         check("保留使用者的其他設定", s.get("model") == "sonnet")
         check("保留使用者自己的 hook", user_hook in s["hooks"]["PreToolUse"])
-        check("加了 4 個 hook、沒有 SessionStart", our_count(s) == 4 and "SessionStart" not in s["hooks"])
+        check("加了 5 個 hook、沒有 SessionStart", our_count(s) == 5 and "SessionStart" not in s["hooks"])
         check("CLAUDE.md 沒被改", (p / "CLAUDE.md").read_text(encoding="utf-8") == "# 我的專案\n\n原本的內容。\n")
         check("沒建 session_log.md", not (p / "session_log.md").exists())
         gi = (p / ".gitignore").read_text(encoding="utf-8")
@@ -123,7 +123,7 @@ def main():
             cm = (p / "CLAUDE.md").read_text(encoding="utf-8")
             check("既有 CLAUDE.md 保留原文並加接力說明",
                   code == 0 and cm.startswith("# 我的專案\n\n原本的內容。") and "claude-workflow-template:start" in cm, out)
-            check("改裝後 5 個 hook", our_count(settings(p)) == 5)
+            check("改裝後 6 個 hook", our_count(settings(p)) == 6)
 
         # 5. 移除
         code, out = run(p, "--uninstall")
@@ -161,6 +161,19 @@ def main():
             code, out = run(p, "--session-log")
             raw = (p / "CLAUDE.md").read_bytes()
             check("CRLF 檔案寫回後仍是 CRLF", code == 0 and b"\n" not in raw.replace(b"\r\n", b""), out)
+
+        # 10. 只有 AGENTS.md：新建的 CLAUDE.md 要匯入它，否則 Claude Code 會改讀 CLAUDE.md、不再讀 AGENTS.md
+        p = new_project(base, "agents")
+        (p / "AGENTS.md").write_text("# 給 coding agent 的說明\n", encoding="utf-8")
+        code, out = run(p, "--no-session-log", "--dry-run")
+        check("預演有說明會匯入 AGENTS.md", code == 0 and "@AGENTS.md" in out, out)
+        code, out = run(p, "--no-session-log")
+        cm = (p / "CLAUDE.md").read_text(encoding="utf-8")
+        check("新建的 CLAUDE.md 第一行是 @AGENTS.md", code == 0 and cm.splitlines()[0] == "@AGENTS.md", cm[:80])
+        check("AGENTS.md 沒被改", (p / "AGENTS.md").read_text(encoding="utf-8") == "# 給 coding agent 的說明\n")
+        code, out = run(p, "--no-session-log")
+        check("重跑不重複加 @AGENTS.md",
+              code == 0 and (p / "CLAUDE.md").read_text(encoding="utf-8").count("@AGENTS.md") == 1, out)
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

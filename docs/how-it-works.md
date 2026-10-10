@@ -44,6 +44,8 @@ hook 全部 fail-open：hook 自己出錯時一律放行，不會卡住你，但
 
 `install.py` 沒指定時會自己判斷：專案不在 git repo 裡就裝，在 git repo 裡就不裝。
 
+session_log 跟 Claude Code 內建的 [auto memory](https://code.claude.com/docs/en/memory#auto-memory) 可以並用。auto memory 預設開啟，由 Claude 自己判斷什麼值得記，官方原文是「Claude doesn't save something every session」，所以不保證記下上次做到哪。session_log 的內容由你決定、格式固定，每次開場一定注入。
+
 ## 改成自己的版本
 
 - 規則寫在 `.claude/rules/dispatch-and-verify.md`，派工模板在 `.claude/skills/dispatch-template/SKILL.md`，直接改就好。同一條規則只寫在一個地方，不然改了一邊，另一邊會過時。

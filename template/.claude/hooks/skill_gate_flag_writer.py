@@ -1,4 +1,8 @@
-"""PostToolUse hook (matcher: Skill)：記錄受管制的 skill 是否被呼叫過。
+"""PostToolUse hook (matcher: Skill) 與 UserPromptExpansion hook：記錄受管制的 skill 是否被呼叫過。
+
+兩條路都要接：Claude 自己用 Skill 工具叫用時走 PostToolUse；使用者直接打 `/dispatch-template`
+時不經過 Skill 工具，只會觸發 UserPromptExpansion（官方 hooks 文件："typing `/skillname`
+directly bypasses `PreToolUse`. `UserPromptExpansion` fires on that direct path"）。
 
 目前受管制者見 TRACKED_SKILLS：dispatch-template（派 subagent 前必讀，閘門是 dispatch_gate.py）。
 
@@ -42,8 +46,11 @@ def main():
     except Exception:
         return
 
-    tool_input = hook_input.get("tool_input") or {}
-    skill_name = normalize_skill_name(tool_input.get("skill"))
+    if hook_input.get("hook_event_name") == "UserPromptExpansion":
+        raw_name = hook_input.get("command_name")
+    else:
+        raw_name = (hook_input.get("tool_input") or {}).get("skill")
+    skill_name = normalize_skill_name(raw_name)
     if skill_name is None:
         return
 

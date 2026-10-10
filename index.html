@@ -114,7 +114,7 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.9rem; }
 
 <section>
   <h2>它解決什麼問題</h2>
-  <p>一篇論文要寫好幾個月，Claude Code 每次開新 session 卻都不記得上次做到哪。派 subagent 做事時，常常沒交代清楚要什麼、做完怎麼算完成；做完了，也沒有人回頭核對。這個 template 把這幾件事分成兩類：</p>
+  <p>一篇論文要寫好幾個月，會跨很多個 session。Claude Code 的 auto memory 由 Claude 自己決定要記什麼，不保證記下上次做到哪；<code>--continue</code> 只能接回上一段對話。派 subagent 做事時，常常沒交代清楚要什麼、做完怎麼算完成；做完了，也沒有人回頭核對。這個 template 把這幾件事分成兩類：</p>
   <div class="principle">忘了也要發生的事交給 hook；需要判斷的事寫成規則，讓 Claude 照做。</div>
   <p>hook 是 Claude Code 在特定時間點自動執行的腳本，可以注入內容，也可以擋下動作。規則寫在 <code>.claude/rules/</code> 和 skill 裡，靠 Claude 自律，不一定每次都照做。</p>
 </section>
@@ -177,11 +177,11 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.9rem; }
 <section>
   <h2>開始使用</h2>
   <ol>
-    <li><strong>確認環境</strong>：Claude Code 2.1.271 以上、Python 3.8 以上。裝 session_log 還要 PowerShell（Windows 內建）。Git 不是必要的。檢查方法見 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">README 的環境表</a>。</li>
-    <li><strong>讓 AI 幫你裝</strong>：在你的專案資料夾開 Claude Code 或 Codex，貼上 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝方法一讓-ai-幫你裝建議">README 裡的安裝 prompt</a>。它會先檢查環境，缺什麼先問你，每一步等你同意才做。</li>
-    <li><strong>或自己裝</strong>：下載 ZIP 解壓縮，執行 <code>python install.py 你的專案資料夾 --dry-run</code> 看它要做什麼，沒問題再拿掉 <code>--dry-run</code>。原本的設定會保留，改動前先備份；不要了可以用 <code>--uninstall</code> 移除。</li>
+    <li><strong>確認環境</strong>：Claude Code 2.1.292 以上、Python 3.8 以上。裝 session_log 還要 PowerShell（Windows 內建；macOS、Linux、WSL 要另外裝 PowerShell 7）。Git 不是必要的。檢查方法見 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">README 的環境表</a>。</li>
+    <li><strong>讓 AI 幫你裝</strong>：在你的專案資料夾開 Claude Code 或 Codex，貼上 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝方法一讓-ai-幫你裝建議">README 裡的安裝 prompt</a>。它會先檢查環境，缺什麼先問你，每一步等你同意才做。用 Codex 裝也可以，但裝好的東西只在 Claude Code 裡有作用。</li>
+    <li><strong>或自己裝</strong>：下載 ZIP 解壓縮，執行 <code>python install.py 你的專案資料夾 --dry-run</code>（macOS、Linux、WSL 用 <code>python3</code>）看它要做什麼，沒問題再拿掉 <code>--dry-run</code>。原本的設定會保留，改動前先備份；不要了可以用 <code>--uninstall</code> 移除。</li>
   </ol>
-  <p>適合以寫作、研究為主、一個專案會跨很多 session 的人。hook 是 Python，各平台都能跑；session_log 的開場注入是 PowerShell 腳本，只在 Windows 上測過。</p>
+  <p>適合以寫作、研究為主、一個專案會跨很多 session 的人。Windows 原生在實機上跑過；WSL2（Ubuntu）跑過 hook 與安裝程式的測試；macOS 還沒測。用 WSL 的話，Claude Code 和安裝程式都在 WSL 裡跑。</p>
 </section>
 
 <footer>

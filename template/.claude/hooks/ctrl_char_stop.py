@@ -8,9 +8,13 @@
 哪些檔案：只看本回合 transcript 裡有證據的路徑，而且 mtime 晚於本回合開始——
 - Write／Edit／NotebookEdit 的目標路徑；
 - Bash／PowerShell 命令、以及本回合用 Write 寫出的 .py／.ps1 內容裡出現的完整絕對路徑。
-命令裡用變數組出來的路徑抓不到，會漏檢；這支只求擋住常見情況，不保證全抓。
+  Windows 路徑（C:\...、C:/...、/c/...）與 POSIX 絕對路徑（/home/...、/Users/...、/mnt/c/...）都認；
+  POSIX 路徑含空白時要有引號包住才抓得到。
+命令裡用變數組出來的路徑抓不到，會漏檢；subagent 寫的檔案記在另一份 transcript，也不在檢查範圍。
+這支只求擋住常見情況，不保證全抓。
 
-Fail-open：任何例外都放行。stop_hook_active 時放行，同一回合最多擋 2 次，避免卡死無人看管的 session。
+Fail-open：任何例外都放行。stop_hook_active 為真（這一回合已經擋過一次、Claude 正在補救）時直接放行，
+所以同一回合實際最多擋 1 次，避免卡死無人看管的 session；MAX_BLOCKS_PER_TURN 是額外的保險。
 """
 import json
 import os
@@ -28,8 +32,13 @@ MAX_BLOCKS_PER_TURN = 2
 STATE_FILE = Path(__file__).with_name("ctrl_char_stop_state.json")
 
 BAD = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x80-\x9f]|\r(?!\n)")
-# 完整絕對路徑：C:\...、C:/...、/c/...，結尾是三種副檔名之一
+# 完整絕對路徑，結尾是三種副檔名之一：
+# Windows 寫法 C:\...、C:/...、/c/...（Git Bash），可含空白
 PATH_RE = re.compile(r"(?:[A-Za-z]:[\\/]|/[a-zA-Z]/)[^\"'`<>|\r\n*?]*?\.(?:md|json|py)(?![\w])", re.I)
+# POSIX 絕對路徑：引號包住的可含空白；沒引號的到空白或 shell 符號為止。
+# 前面不能是英數、`.`、`:`、`/`，避免把相對路徑或網址的後半段當成絕對路徑
+QUOTED_POSIX_RE = re.compile(r"[\"'](/[^\"'\r\n]*?\.(?:md|json|py))[\"']", re.I)
+BARE_POSIX_RE = re.compile(r"(?<![\w.:/\\-])(/[^\s\"'`<>|*?;&()]+\.(?:md|json|py))(?![\w])", re.I)
 
 
 def is_real_user_message(r) -> bool:
@@ -44,6 +53,9 @@ def is_real_user_message(r) -> bool:
 
 
 def to_windows(p: str) -> str:
+    """Git Bash 的 /c/... 只在 Windows 上轉成 C:/...；其他系統的 /c/ 就是一般目錄。"""
+    if os.name != "nt":
+        return p
     m = re.match(r"^/([a-zA-Z])/(.*)$", p)
     if m:
         p = f"{m.group(1)}:/{m.group(2)}"
@@ -73,9 +85,13 @@ def candidate_paths(records, start_idx, cwd):
             else:
                 texts.append(inp.get("command"))
             for t in texts:
-                if isinstance(t, str):
-                    for m in PATH_RE.finditer(t):
-                        paths.add(to_windows(m.group(0).replace("\\\\", "\\")))
+                if not isinstance(t, str):
+                    continue
+                for m in PATH_RE.finditer(t):
+                    paths.add(to_windows(m.group(0).replace("\\\\", "\\")))
+                for rx in (QUOTED_POSIX_RE, BARE_POSIX_RE):
+                    for m in rx.finditer(t):
+                        paths.add(to_windows(m.group(1)))
     return paths
 
 

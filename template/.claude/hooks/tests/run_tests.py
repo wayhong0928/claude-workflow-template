@@ -213,6 +213,21 @@ def test_flag_writer(sb):
     left = list((sb.hooks / "skill_gate_flags").glob(f"{sid}__*"))
     check("skill_gate_flag_writer: 未受管制的 skill -> 不寫", rc == 0 and not left, str(left))
 
+    # 使用者直接打 /dispatch-template：不經 Skill 工具，走 UserPromptExpansion
+    def expansion(sid, name):
+        return {"hook_event_name": "UserPromptExpansion", "session_id": sid,
+                "expansion_type": "slash_command", "command_name": name,
+                "command_args": "", "prompt": f"/{name}"}
+
+    sid = sb.sid()
+    rc, out, _ = sb.run("skill_gate_flag_writer.py", expansion(sid, "dispatch-template"))
+    check("skill_gate_flag_writer: 使用者打 /dispatch-template -> 寫 flag",
+          rc == 0 and out == "" and sb.flag_path(sid, "dispatch-template").is_file(), out[:100])
+    sid = sb.sid()
+    rc, out, _ = sb.run("skill_gate_flag_writer.py", expansion(sid, "my-plugin:dispatch-template"))
+    check("skill_gate_flag_writer: 使用者打 /plugin:dispatch-template -> 用裸名稱寫 flag",
+          rc == 0 and sb.flag_path(sid, "dispatch-template").is_file(), out[:100])
+
     # end to end: writer then gate
     sid = sb.sid()
     sb.run("skill_gate_flag_writer.py", skill(sid, "dispatch-template"))
@@ -266,6 +281,27 @@ def test_ctrl_char(sb):
     check("ctrl_char_stop: 正常中文 -> 放", rc == 0 and out == "", out[:100])
     rc, out, _ = case("crlf.md", "第一行\r\n第二行\r\n".encode("utf-8"))
     check("ctrl_char_stop: CRLF 換行 -> 放", rc == 0 and out == "", out[:100])
+
+    # Bash 指令裡的絕對路徑（Windows 是 C:/...，Linux／macOS 是 /tmp/...、/Users/...）
+    def bash_case(f, command):
+        recs = [user_rec(now - timedelta(seconds=30)),
+                tool_use_rec("Bash", {"command": command}, sb.work, now),
+                tool_result_rec(now)]
+        payload = {"session_id": sb.sid(), "transcript_path": str(sb.transcript(recs)),
+                   "cwd": str(sb.work), "hook_event_name": "Stop", "stop_hook_active": False}
+        return sb.run("ctrl_char_stop.py", payload)
+
+    bad = b"x\x08y\n"
+    f = sb.work / "bash_bad.md"
+    f.write_bytes(bad)
+    rc, out, _ = bash_case(f, f"printf 'x\\by' > {f.as_posix()}")
+    check("ctrl_char_stop: Bash 指令裡的絕對路徑 -> 擋", rc == 0 and decision(out) == "block", out[:100])
+    spaced = sb.work / "有 空白"
+    spaced.mkdir(exist_ok=True)
+    f = spaced / "bad.md"
+    f.write_bytes(bad)
+    rc, out, _ = bash_case(f, f"printf 'x\\by' > \"{f.as_posix()}\"")
+    check("ctrl_char_stop: 引號包住、含空白與中文的路徑 -> 擋", rc == 0 and decision(out) == "block", out[:100])
 
 
 def main():

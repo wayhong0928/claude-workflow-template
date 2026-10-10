@@ -348,9 +348,18 @@ def install(target, session_log, dry_run):
     cmd = find_claude_md(target)
     block = session_log_block(py) if session_log else ""
     if cmd is None:
-        plan.say("CLAUDE.md：新建（裡面有【】空格要填）")
+        # 有 CLAUDE.md 之後，Claude Code 就不再自動讀 AGENTS.md（官方 memory 文件的 AGENTS.md 一節），
+        # 所以專案原本有 AGENTS.md 時，新建的 CLAUDE.md 第一行用 @AGENTS.md 把它匯入
+        agents_md = (target / "AGENTS.md").exists()
+        if agents_md:
+            plan.say("CLAUDE.md：新建，第一行用 @AGENTS.md 匯入你原本的 AGENTS.md"
+                     "（有了 CLAUDE.md，Claude Code 就不會自動讀 AGENTS.md）；裡面有【】空格要填")
+        else:
+            plan.say("CLAUDE.md：新建（裡面有【】空格要填）")
         if not dry_run:
             body = read_text(TPL / "CLAUDE.md.template").rstrip("\n") + "\n"
+            if agents_md:
+                body = "@AGENTS.md\n\n" + body
             if block:
                 body += "\n" + block
             write_text(target / "CLAUDE.md", body)
@@ -400,7 +409,7 @@ def install(target, session_log, dry_run):
     if plan.backed_up:
         print(f"備份在：{plan.backup_dir.relative_to(target).as_posix()}/")
     print("安裝完成。接下來：")
-    steps = [f"在專案資料夾跑 {py} .claude/hooks/tests/run_tests.py ，最後一行要是「21/21 通過」（前後數字一樣就是全過）"]
+    steps = [f"在專案資料夾跑 {py} .claude/hooks/tests/run_tests.py ，最後一行要是「25/25 通過」（前後數字一樣就是全過）"]
     if cmd is None:
         steps.append("打開 CLAUDE.md，把【】填完（也可以請 Claude 一題一題問你）")
     steps.append("關掉正在跑的 Claude Code，在專案資料夾重新打 claude，再打 /hooks 確認看得到這幾個 hook")

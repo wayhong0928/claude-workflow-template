@@ -64,7 +64,11 @@ if ($logPath) {
         $cutoff = (Get-Date).AddDays(-$archiveWindowDays).ToString('yyyy-MM-dd')
         $archivable = @($blocks | Where-Object { $_.Date -lt $cutoff -and ($newest -notcontains $_) })
         if ($archivable.Count -gt 0) {
-            $sizeNote = "`n[維護提醒] session_log.md 已超過 80KB，其中 $($archivable.Count) 筆早於 $cutoff，可以歸檔。歸檔只是把整段原文搬進 session_log_archive.md，不刪任何內容，最新 3 筆一律保留。執行：powershell -File `"$PSScriptRoot\archive_session_log.ps1`""
+            # 指令照目前執行環境組：Windows PowerShell 用 powershell，PowerShell 7（含 macOS／Linux）用 pwsh；
+            # Windows 用戶端預設執行原則是 Restricted，不加 -ExecutionPolicy Bypass 會跑不起來
+            $psExe = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell' }
+            $archiveScript = Join-Path $PSScriptRoot 'archive_session_log.ps1'
+            $sizeNote = "`n[維護提醒] session_log.md 已超過 80KB，其中 $($archivable.Count) 筆早於 $cutoff，可以歸檔。歸檔只是把整段原文搬進 session_log_archive.md，不刪任何內容，最新 3 筆一律保留。執行：$psExe -NoProfile -ExecutionPolicy Bypass -File `"$archiveScript`""
         }
     }
     # 標題遺失檢查：在頂部加新紀錄時，有可能弄掉下面一筆的 "## " 標題，兩筆內容因此併成一筆。

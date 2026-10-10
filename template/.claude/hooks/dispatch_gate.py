@@ -8,7 +8,11 @@
 刻意不攔的情況：
 - `subagent_type: "fork"`——fork 會繼承主對話的完整 context，模板那套「它什麼都不知道，
   要給它目標／動機／驗收條件」的前提不成立。
-- 呼叫 `dispatch-template` skill 本身（那正是我們要求的動作，由 skill_gate_flag_writer 記錄）。
+- 呼叫 `dispatch-template` skill 本身（那正是我們要求的動作，由 skill_gate_flag_writer 記錄；
+  使用者直接打 `/dispatch-template` 也算，走 UserPromptExpansion）。
+
+刻意要攔的情況：內建的 Explore、Plan 等 subagent 也一樣要先載模板。它們同樣是從零開始的 context，
+寫清楚目標與回報格式一樣有用；代價是進 plan mode 後第一次派工可能被擋一次，載入模板後就放行。
 
 Fail-open：任何例外、任何判斷不確定的情況一律放行，不阻擋正常工作。
 

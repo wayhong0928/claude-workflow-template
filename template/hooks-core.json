@@ -26,6 +26,19 @@
       ]
     }
   ],
+  "UserPromptExpansion": [
+    {
+      "matcher": "(^|:)dispatch-template$",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python",
+          "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/skill_gate_flag_writer.py"],
+          "timeout": 10
+        }
+      ]
+    }
+  ],
   "UserPromptSubmit": [
     {
       "hooks": [
