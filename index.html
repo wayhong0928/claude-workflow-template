@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code 工作流 template</title>
+<meta name="description" content="給研究生用的 Claude Code 專案設定：開場自動接上次進度、派 subagent 前先套派工模板、產出交給另一個 agent 驗收，另有幾支 hook 擋常見的錯。">
+<style>
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #1d232b;
+  --muted: #5b6573;
+  --line: #dde2e8;
+  --accent: #2f5d8a;
+  --accent-soft: #e6eef6;
+  --code-bg: #eef1f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14181d;
+    --surface: #1c2229;
+    --text: #e4e8ed;
+    --muted: #9aa5b1;
+    --line: #2e3640;
+    --accent: #8fb6dd;
+    --accent-soft: #22303d;
+    --code-bg: #252c35;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14181d;
+  --surface: #1c2229;
+  --text: #e4e8ed;
+  --muted: #9aa5b1;
+  --line: #2e3640;
+  --accent: #8fb6dd;
+  --accent-soft: #22303d;
+  --code-bg: #252c35;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+}
+main { max-width: 860px; margin: 0 auto; padding: 40px 16px 64px; }
+h1 { font-size: 1.9rem; line-height: 1.3; margin: 0 0 12px; }
+h2 { font-size: 1.3rem; margin: 48px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+p { margin: 0 0 12px; }
+a { color: var(--accent); }
+code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 0.92em; overflow-wrap: anywhere; }
+.lead { color: var(--muted); font-size: 1.05rem; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 0; }
+.btn {
+  display: inline-block; padding: 8px 16px; border-radius: 6px;
+  border: 1px solid var(--accent); text-decoration: none; font-weight: 600;
+}
+.btn.primary { background: var(--accent); color: var(--bg); }
+.principle {
+  background: var(--accent-soft); border-left: 4px solid var(--accent);
+  padding: 12px 16px; border-radius: 4px; margin: 16px 0;
+}
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+.card h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.card .folder { color: var(--muted); font-size: 0.9rem; }
+.card p { margin: 6px 0 0; font-size: 0.95rem; }
+ol.flow { list-style: none; counter-reset: step; padding: 0; margin: 0; }
+ol.flow li {
+  counter-increment: step; position: relative;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 12px 16px 12px 56px; margin-bottom: 10px;
+}
+ol.flow li::before {
+  content: counter(step); position: absolute; left: 16px; top: 12px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: var(--bg);
+  font-weight: 700; font-size: 0.9rem; text-align: center; line-height: 26px;
+}
+ol.flow strong { display: block; }
+.tag { display: inline-block; font-size: 0.8rem; padding: 0 8px; border-radius: 10px; margin-left: 6px; vertical-align: 2px; border: 1px solid var(--accent); color: var(--accent); font-weight: 600; }
+.tag.self { border-color: var(--muted); color: var(--muted); }
+.note { color: var(--muted); font-size: 0.92rem; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.95rem; }
+th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: var(--accent-soft); }
+td:first-child { white-space: nowrap; }
+.table-wrap { overflow-x: auto; }
+ul { padding-left: 1.3em; }
+li { margin-bottom: 6px; }
+footer { margin-top: 56px; color: var(--muted); font-size: 0.9rem; }
+@media (max-width: 520px) {
+  h1 { font-size: 1.55rem; }
+  ol.flow li { padding-left: 50px; }
+}
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <h1>Claude Code 工作流 template</h1>
+  <p class="lead">給研究生用的 Claude Code 工作流程設定，裝進你自己的論文或筆記資料夾就能用。開場自動接上次進度，派 subagent 前先套派工模板，產出交給另一個 agent 驗收，另有幾支 hook 擋常見的錯。需要 Python 3，不需要會 Git。</p>
+  <div class="actions">
+    <a class="btn primary" href="https://github.com/wayhong0928/claude-workflow-template">到 GitHub 下載</a>
+    <a class="btn" href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">安裝步驟</a>
+    <a class="btn" href="https://github.com/wayhong0928/claude-workflow-template/blob/main/docs/vs-superpowers.md">跟 Superpowers 比較</a>
+  </div>
+</header>
+
+<section>
+  <h2>它解決什麼問題</h2>
+  <p>一篇論文要寫好幾個月，Claude Code 每次開新 session 卻都不記得上次做到哪。派 subagent 做事時，常常沒交代清楚要什麼、做完怎麼算完成；做完了，也沒有人回頭核對。這個 template 把這幾件事分成兩類：</p>
+  <div class="principle">忘了也要發生的事交給 hook；需要判斷的事寫成規則，讓 Claude 照做。</div>
+  <p>hook 是 Claude Code 在特定時間點自動執行的腳本，可以注入內容，也可以擋下動作。規則寫在 <code>.claude/rules/</code> 和 skill 裡，靠 Claude 自律，不一定每次都照做。</p>
+</section>
+
+<section>
+  <h2>四個組成</h2>
+  <div class="cards">
+    <div class="card">
+      <h3>接力</h3>
+      <div class="folder"><code>.claude/session-log-kit/</code></div>
+      <p>選裝。session_log 記做了什麼，TODO 記還沒做什麼。開場由 hook 注入最新一筆全文和前兩筆的下一步。專案不在 git repo 裡時，安裝程式預設會裝。</p>
+    </div>
+    <div class="card">
+      <h3>派工</h3>
+      <div class="folder"><code>.claude/skills/dispatch-template/</code></div>
+      <p>先問值不值得派，派就用模板寫清楚目標、驗收條件和回報格式，並指定模型。沒載入模板就派工，hook 會擋下。</p>
+    </div>
+    <div class="card">
+      <h3>驗收</h3>
+      <div class="folder"><code>.claude/agents/verifier.md</code></div>
+      <p>做的人不驗自己的活。依產出風險分三級，最高一級交給只拿到驗收條件、沒看過推理過程的 verifier。</p>
+    </div>
+    <div class="card">
+      <h3>護欄 hook</h3>
+      <div class="folder"><code>.claude/hooks/</code></div>
+      <p>一再犯的錯改成機制：寫出控制字元會被擋，context 過長會被提醒。hook 自己出錯時一律放行，不會卡住工作。</p>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>一個 session 從開場到收尾</h2>
+  <ol class="flow">
+    <li><strong>開場<span class="tag">機制</span></strong>有裝 session_log 的話，SessionStart hook 注入 session_log 最新一筆全文，加前兩筆的標題與下一步。Claude 先用一兩句話報告上次進度。</li>
+    <li><strong>決定要不要派 subagent<span class="tag self">自律</span></strong>主對話預設自己做。只有要隔離大量內容、有可獨立完成的工作包、或需要獨立驗收時才派。</li>
+    <li><strong>派工前載模板<span class="tag">機制</span></strong>這個 session 還沒載入 <code>dispatch-template</code> 就派工，<code>dispatch_gate.py</code> 會擋下並說明原因。</li>
+    <li><strong>不過就續問或升級<span class="tag self">自律</span></strong>第一次不過先續問原 agent；再不過才換更強的模型，並附上兩次的失敗紀錄。</li>
+    <li><strong>宣告完成前驗收<span class="tag self">自律</span></strong>依下面的三級表決定怎麼驗。</li>
+    <li><strong>context 過長時提醒<span class="tag">機制</span></strong>主對話超過 15 萬 token，<code>context_guard.py</code> 提醒你在段落點補 log，再下 <code>/clear</code>。</li>
+    <li><strong>回合結束掃控制字元<span class="tag">機制</span></strong>本回合寫過的 .md、.json、.py 混進控制字元，<code>ctrl_char_stop.py</code> 會擋下。</li>
+    <li><strong>收尾<span class="tag self">自律</span></strong>有裝 session_log 的話，用 <code>add_session_log.py</code> 在頂部補一筆（腳本檢查格式），刪掉做完的 TODO。</li>
+  </ol>
+</section>
+
+<section>
+  <h2>驗收分三級</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>級</th><th>產出</th><th>怎麼驗</th></tr></thead>
+    <tbody>
+      <tr><td>0</td><td>照抄使用者提供的內容、session_log、TODO、搬檔、單行修改</td><td>不派 verifier，回報寫明理由</td></tr>
+      <tr><td>1</td><td>批次修改、數字加總、程式、腳本、hook</td><td>跑腳本或測試，把輸出貼出來當證據</td></tr>
+      <tr><td>2</td><td>論文正文與文獻筆記、公開網站內容、規則檔、報告的結論與出處</td><td>派 fresh-context 的 verifier，只給驗收條件與檔案；高風險判斷再加一路 opus 第二意見</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="note" style="margin-top:12px">完整規則在 <a href="https://github.com/wayhong0928/claude-workflow-template/blob/main/template/.claude/rules/dispatch-and-verify.md"><code>.claude/rules/dispatch-and-verify.md</code></a>。</p>
+</section>
+
+<section>
+  <h2>開始使用</h2>
+  <ol>
+    <li><strong>確認環境</strong>：Claude Code 2.1.271 以上、Python 3.8 以上。裝 session_log 還要 PowerShell（Windows 內建）。Git 不是必要的。檢查方法見 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">README 的環境表</a>。</li>
+    <li><strong>讓 AI 幫你裝</strong>：在你的專案資料夾開 Claude Code 或 Codex，貼上 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝方法一讓-ai-幫你裝建議">README 裡的安裝 prompt</a>。它會先檢查環境，缺什麼先問你，每一步等你同意才做。</li>
+    <li><strong>或自己裝</strong>：下載 ZIP 解壓縮，執行 <code>python install.py 你的專案資料夾 --dry-run</code> 看它要做什麼，沒問題再拿掉 <code>--dry-run</code>。原本的設定會保留，改動前先備份；不要了可以用 <code>--uninstall</code> 移除。</li>
+  </ol>
+  <p>適合以寫作、研究為主、一個專案會跨很多 session 的人。hook 是 Python，各平台都能跑；session_log 的開場注入是 PowerShell 腳本，只在 Windows 上測過。</p>
+</section>
+
+<footer>
+  <p>MIT 授權。照步驟裝不起來或 hook 誤擋，請到 <a href="https://github.com/wayhong0928/claude-workflow-template/issues">Issues</a> 回報。研究方法與論文寫作的其他資源見 <a href="https://wayhong0928.github.io/mis-thesis-guide/">mis-thesis-guide</a>。</p>
+</footer>
+
+</main>
+</body>
+</html>
