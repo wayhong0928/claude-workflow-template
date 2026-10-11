@@ -51,7 +51,7 @@ session_log 跟 Claude Code 內建的 [auto memory](https://code.claude.com/docs
 改一整章、整理一批文獻筆記這類動到很多檔案、要跑很多回合的工作，照這三步：
 
 1. **先規劃**：按 `Shift+Tab` 切到 plan mode（或在訊息前加 `/plan`），請 Claude 讀檔、提計畫。plan mode 裡 Claude 只讀不改。計畫要附一份可以逐條勾選的驗收條件，例如「第二章每段都有引用」「`notes/` 每份筆記的研究問題、方法、發現三欄都填了」。寫成一段散文的計畫，請它重寫。
-2. **核准時選 auto mode**：計畫好了，Claude Code 會問你要不要執行，選「Yes, and use auto mode」。下一步的 `/goal` 不會改權限模式，留在手動模式的話，它每用一次工具都會停下來問你。
+2. **核准時選 auto mode**：計畫好了，Claude Code 會問你要不要執行，選「Yes, and use auto mode」（auto mode 不能用時，例如組織關掉了，這個選項會變成「Yes, auto-accept edits」）。下一步的 `/goal` 不會改權限模式，留在手動模式的話，設定沒允許的工具呼叫都會停下來問你。
 3. **設 `/goal`**：打 `/goal` 加上完成條件，Claude 會一回合接一回合做，直到另一個模型判斷條件達成。這個判斷的模型只讀對話內容，不會自己跑指令或開檔，所以條件要寫成「對話裡看得到的證據」。
 
 條件寫法（官方 [goal 文件](https://code.claude.com/docs/en/goal)建議要有終點、證明方式、途中不能動的東西，再加回合上限）：
