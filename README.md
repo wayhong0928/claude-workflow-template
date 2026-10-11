@@ -1,3 +1,5 @@
+繁體中文 | [English](README.en.md)
+
 # claude-workflow-template
 
 給研究生用的 Claude Code 工作流程設定，裝進你自己的專案資料夾（論文、文獻筆記、報告）就能用。裝好之後：
@@ -168,6 +170,7 @@ docs/
   vs-superpowers.md        跟 Superpowers 的差異
 tests/test_install.py      install.py 的測試
 index.html                 介紹頁
+README.md、README.en.md    說明文件（繁體中文、英文）
 ```
 
 在這個 repo 的資料夾裡開 `claude` 不會啟用任何 hook，東西都放在 `template/` 底下，裝進你的專案才會生效。
