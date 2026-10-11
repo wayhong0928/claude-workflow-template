@@ -1,12 +1,13 @@
 """把 claude-workflow-template 裝進一個專案，或從專案移除。只用 Python 標準函式庫。
 
 用法：
-  python install.py <專案資料夾> [--session-log | --no-session-log] [--dry-run]
+  python install.py <專案資料夾> [--session-log | --no-session-log] [--protect 路徑 ...] [--dry-run]
   python install.py <專案資料夾> --uninstall [--dry-run]
 
 安裝會做的事：
   - 把 template/.claude/ 底下的 hook、skill、agent、規則檔複製到 <專案>/.claude/
   - 把 hook 設定合併進 <專案>/.claude/settings.json（原本的設定保留，只加這個 template 的幾項）
+  - 有給 --protect 時，在 settings.json 的 permissions.deny 加上 Edit 規則，讓 Claude 不能改那些檔案或資料夾
   - 專案沒有 CLAUDE.md 就建一份；裝 session_log 時在 CLAUDE.md 結尾加一段接力說明
   - 裝 session_log 時，專案沒有 session_log.md、TODO.md 就各建一份
   - 專案在 git repo 裡時，在 .gitignore 加上 hook 產生的本機狀態檔
@@ -157,6 +158,9 @@ def load_settings(p):
         raise InstallError(f"{p} 最外層不是物件（{{...}}），沒有動任何檔案。")
     if "hooks" in data and not isinstance(data["hooks"], dict):
         raise InstallError(f"{p} 的 \"hooks\" 不是物件，沒有動任何檔案。")
+    perms = data.get("permissions", {})
+    if not isinstance(perms, dict) or not isinstance(perms.get("deny", []), list):
+        raise InstallError(f"{p} 的 \"permissions\" 或 \"permissions.deny\" 格式不對，沒有動任何檔案。")
     return data
 
 
@@ -201,13 +205,39 @@ def add_ours(hooks, defs, py, ps):
     return hooks
 
 
-def merged_settings(current, session_log, py, ps):
+def protect_rule(target, raw):
+    """把 --protect 的路徑轉成 permissions.deny 的 Edit 規則。
+    專案裡的路徑用 /相對路徑（官方：相對於設定檔所在的專案），專案外用 //絕對路徑。"""
+    p = Path(raw).expanduser()
+    p = (p if p.is_absolute() else target / p).resolve()
+    if not p.exists():
+        raise InstallError(f"--protect 找不到 {p}，沒有動任何檔案。")
+    if p == target:
+        raise InstallError("--protect 不能是整個專案資料夾，那樣 Claude 什麼都改不了。請指定裡面的資料夾或檔案。")
+    if any(c in str(p) for c in "*?[]"):
+        raise InstallError(f"{p} 含有 * ? [ ] 這類萬用字元，規則會比對錯。請手動寫進 settings.json（寫法見 README）。")
+    try:
+        pattern = "/" + p.relative_to(target).as_posix()
+    except ValueError:
+        posix = p.as_posix()
+        if len(posix) > 1 and posix[1] == ":":  # Windows：D:/data → //d/data
+            posix = posix[0].lower() + posix[2:]
+        pattern = "//" + posix.lstrip("/")
+    if p.is_dir():
+        pattern += "/**"
+    return f"Edit({pattern})"
+
+
+def merged_settings(current, session_log, py, ps, protect=()):
     new = json.loads(json.dumps(current))
     hooks = strip_ours(new.get("hooks", {}))
     add_ours(hooks, json.loads(read_text(TPL / "hooks-core.json")), py, ps)
     if session_log:
         add_ours(hooks, json.loads(read_text(TPL / "hooks-session-log.json")), py, ps)
     new["hooks"] = hooks
+    if protect:
+        deny = new.setdefault("permissions", {}).setdefault("deny", [])
+        deny.extend(r for r in protect if r not in deny)
     return new
 
 
@@ -288,8 +318,13 @@ def check_target(target):
         raise InstallError(f"找不到 {TPL}。請在下載下來的 template 資料夾裡執行 install.py，不要只複製這支檔案。")
 
 
-def install(target, session_log, dry_run):
+def install(target, session_log, dry_run, protect=()):
     check_target(target)
+    rules = []
+    for raw in protect:  # 路徑有錯在這裡就停，什麼都還沒動
+        r = protect_rule(target, raw)
+        if r not in rules:
+            rules.append(r)
     py = find_python()
     if not py:
         raise InstallError("找不到 Python 3.8 以上的指令（試過 python、python3、py）。hook 需要它，請先安裝 Python。")
@@ -332,13 +367,16 @@ def install(target, session_log, dry_run):
     plan.say(f"複製檔案到 .claude/：新增 {counts['new']}、覆蓋 {counts['replace']}、內容相同略過 {counts['same']}")
 
     # 2. settings.json
-    new = merged_settings(current, session_log, py, ps)
+    new = merged_settings(current, session_log, py, ps, rules)
+    old_deny = current.get("permissions", {}).get("deny", [])
+    for r in rules:
+        plan.say(f"保護規則：{r}" + ("（已經有了）" if r in old_deny else "（Claude 不能改這裡的檔案）"))
     if new == current and settings_path.exists():
         plan.say(".claude/settings.json：已經是最新，沒改")
     else:
         if settings_path.exists():
             plan.backup(settings_path)
-            plan.say(".claude/settings.json：加入這個 template 的 hook，原本的設定保留")
+            plan.say(".claude/settings.json：加入這個 template 的設定，原本的設定保留")
         else:
             plan.say(".claude/settings.json：新建")
         if not dry_run:
@@ -412,6 +450,11 @@ def install(target, session_log, dry_run):
     steps = [f"在專案資料夾跑 {py} .claude/hooks/tests/run_tests.py ，最後一行要是「25/25 通過」（前後數字一樣就是全過）"]
     if cmd is None:
         steps.append("打開 CLAUDE.md，把【】填完（也可以請 Claude 一題一題問你）")
+    if rules:
+        steps.append("保護規則擋得到 Claude 的編輯工具和 > 這類輸出重導向，擋不到 Python 等腳本自己開檔寫入。"
+                     "改壞了怎麼還原見 README「改壞了怎麼還原」")
+    else:
+        steps.append("專案裡有不能改的原始資料（PDF、問卷原始檔）的話，再跑一次並加上 --protect 資料夾，見 README「保護原始資料」")
     steps.append("關掉正在跑的 Claude Code，在專案資料夾重新打 claude，再打 /hooks 確認看得到這幾個 hook")
     for i, s in enumerate(steps, 1):
         print(f"  {i}. {s}")
@@ -480,6 +523,8 @@ def uninstall(target, dry_run):
         print("預演結束，沒有動任何檔案。")
         return
     print("移除完成。CLAUDE.md、session_log.md、TODO.md 是你的內容，沒有刪；不需要的話自己刪。")
+    if current.get("permissions", {}).get("deny"):
+        print("settings.json 的 permissions.deny（保護規則）沒有動，原始資料繼續受保護；不需要的話自己刪。")
     if plan.backed_up:
         print(f"備份在：{plan.backup_dir.relative_to(target).as_posix()}/（確定不要了可以整個刪掉）")
 
@@ -493,8 +538,12 @@ def main(argv=None):
     g.add_argument("--no-session-log", dest="session_log", action="store_false",
                    help="不裝 session_log")
     g.add_argument("--uninstall", action="store_true", help="移除這個 template 裝進去的東西")
+    ap.add_argument("--protect", action="append", default=[], metavar="路徑",
+                    help="不讓 Claude 修改的資料夾或檔案（例：pdf、data/問卷原始檔.csv），可以給好幾次")
     ap.add_argument("--dry-run", action="store_true", help="只列出會做什麼，不動任何檔案")
     a = ap.parse_args(argv)
+    if a.uninstall and a.protect:
+        ap.error("--protect 只能在安裝時用")
     if sys.version_info[:2] < MIN_PY:
         print(f"需要 Python {MIN_PY[0]}.{MIN_PY[1]} 以上，你現在用的是 {sys.version.split()[0]}。", file=sys.stderr)
         return 1
@@ -503,7 +552,7 @@ def main(argv=None):
         if a.uninstall:
             uninstall(target, a.dry_run)
         else:
-            install(target, a.session_log, a.dry_run)
+            install(target, a.session_log, a.dry_run, a.protect)
     except InstallError as e:
         print("沒有完成：" + str(e), file=sys.stderr)
         return 1

@@ -46,6 +46,22 @@ hook 全部 fail-open：hook 自己出錯時一律放行，不會卡住你，但
 
 session_log 跟 Claude Code 內建的 [auto memory](https://code.claude.com/docs/en/memory#auto-memory) 可以並用。auto memory 預設開啟，由 Claude 自己判斷什麼值得記，官方原文是「Claude doesn't save something every session」，所以不保證記下上次做到哪。session_log 的內容由你決定、格式固定，每次開場一定注入。
 
+## 長任務：先規劃，再用 `/goal` 跑到完成
+
+改一整章、整理一批文獻筆記這類動到很多檔案、要跑很多回合的工作，照這三步：
+
+1. **先規劃**：按 `Shift+Tab` 切到 plan mode（或在訊息前加 `/plan`），請 Claude 讀檔、提計畫。plan mode 裡 Claude 只讀不改。計畫要附一份可以逐條勾選的驗收條件，例如「第二章每段都有引用」「`notes/` 每份筆記的研究問題、方法、發現三欄都填了」。寫成一段散文的計畫，請它重寫。
+2. **核准時選 auto mode**：計畫好了，Claude Code 會問你要不要執行，選「Yes, and use auto mode」。下一步的 `/goal` 不會改權限模式，留在手動模式的話，它每用一次工具都會停下來問你。
+3. **設 `/goal`**：打 `/goal` 加上完成條件，Claude 會一回合接一回合做，直到另一個模型判斷條件達成。這個判斷的模型只讀對話內容，不會自己跑指令或開檔，所以條件要寫成「對話裡看得到的證據」。
+
+條件寫法（官方 [goal 文件](https://code.claude.com/docs/en/goal)建議要有終點、證明方式、途中不能動的東西，再加回合上限）：
+
+```text
+/goal 計畫的驗收條件逐條在對話裡貼出檢查結果，verifier 的報告已貼出且沒有致命或錯誤等級的問題；不得修改 pdf/ 與 data/；或跑滿 20 回合就停
+```
+
+小改動不用這樣做，直接交代就好。plan mode 裡第一次派 `Explore` 或 `Plan` 可能會被派工檢查擋一次，載入 `dispatch-template` 後就會放行（見 README 已知限制）。
+
 ## 改成自己的版本
 
 - 規則寫在 `.claude/rules/dispatch-and-verify.md`，派工模板在 `.claude/skills/dispatch-template/SKILL.md`，直接改就好。同一條規則只寫在一個地方，不然改了一邊，另一邊會過時。

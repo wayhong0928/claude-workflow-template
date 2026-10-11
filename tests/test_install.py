@@ -174,6 +174,48 @@ def main():
         code, out = run(p, "--no-session-log")
         check("重跑不重複加 @AGENTS.md",
               code == 0 and (p / "CLAUDE.md").read_text(encoding="utf-8").count("@AGENTS.md") == 1, out)
+
+        # 11. --protect：資料夾、檔案、專案外路徑寫成 permissions.deny 的 Edit 規則
+        p = new_project(base, "protect")
+        (p / "pdf").mkdir()
+        (p / "data").mkdir()
+        (p / "data" / "問卷原始檔.csv").write_text("a,b\n", encoding="utf-8")
+        outside = new_project(base, "outside-data")
+        (p / ".claude").mkdir()
+        (p / ".claude/settings.json").write_text(json.dumps(
+            {"permissions": {"deny": ["Read(./.env)"], "allow": ["Bash(ls *)"]}}), encoding="utf-8")
+        code, out = run(p, "--no-session-log", "--protect", "pdf", "--protect", "data/問卷原始檔.csv",
+                        "--protect", str(outside), "--dry-run")
+        check("預演列出保護規則且沒改 settings", code == 0 and "Edit(/pdf/**)" in out and
+              "allow" in (p / ".claude/settings.json").read_text(encoding="utf-8") and
+              "Edit" not in (p / ".claude/settings.json").read_text(encoding="utf-8"), out)
+        code, out = run(p, "--no-session-log", "--protect", "pdf", "--protect", "data/問卷原始檔.csv",
+                        "--protect", str(outside))
+        deny = settings(p).get("permissions", {}).get("deny", [])
+        out_posix = outside.resolve().as_posix()
+        if len(out_posix) > 1 and out_posix[1] == ":":
+            out_posix = out_posix[0].lower() + out_posix[2:]
+        want = ["Read(./.env)", "Edit(/pdf/**)", "Edit(/data/問卷原始檔.csv)", "Edit(//" + out_posix.lstrip("/") + "/**)"]
+        check("資料夾、檔案、專案外路徑各一條規則，原本的 deny 保留在前", code == 0 and deny == want, str(deny))
+        check("permissions 的其他設定保留", settings(p)["permissions"].get("allow") == ["Bash(ls *)"])
+        code, out = run(p, "--no-session-log", "--protect", "pdf")
+        check("重跑不重複加保護規則", code == 0 and settings(p)["permissions"]["deny"] == want,
+              str(settings(p)["permissions"]["deny"]))
+        before = snapshot(p)
+        code, out = run(p, "--no-session-log", "--protect", "不存在的資料夾")
+        check("--protect 路徑不存在就停、不動檔案", code != 0 and "找不到" in out and snapshot(p) == before, out)
+        code, out = run(p, "--no-session-log", "--protect", ".")
+        check("--protect 整個專案會被拒絕", code != 0 and snapshot(p) == before, out)
+        code, out = run(p, "--uninstall")
+        check("移除時保護規則留著", code == 0 and settings(p)["permissions"]["deny"] == want and "沒有動" in out, out)
+
+        # 12. permissions.deny 格式錯：什麼都不動
+        p = new_project(base, "bad-perms")
+        (p / ".claude").mkdir()
+        (p / ".claude/settings.json").write_text(json.dumps({"permissions": {"deny": "Edit(x)"}}), encoding="utf-8")
+        before = snapshot(p)
+        code, out = run(p, "--no-session-log")
+        check("permissions.deny 不是陣列就停", code != 0 and "permissions" in out and snapshot(p) == before, out)
     finally:
         shutil.rmtree(base, ignore_errors=True)
 
