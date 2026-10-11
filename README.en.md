@@ -204,6 +204,7 @@ All of these are in Traditional Chinese.
 | [One-hour quickstart](https://wayhong0928.github.io/mis-thesis-guide/pages/ai-quickstart.html) | Using only the ChatGPT, Claude, or Gemini web apps and wanting a thesis assistant set up within an hour (there's also a [Claude Code and Codex version](https://wayhong0928.github.io/mis-thesis-guide/pages/ai-quickstart-agent.html)) |
 | [thesis-notes-template](https://github.com/wayhong0928/thesis-notes-template) | Wanting to take literature notes in Obsidian with ready-made templates and filling rules |
 | [mis-thesis-skills](https://github.com/wayhong0928/mis-thesis-skills) | Using Claude Code or Codex and wanting the AI to check your topic and writing against fixed criteria |
+| [claude-workflow-template](https://github.com/wayhong0928/claude-workflow-template) | Using Claude Code on a thesis or research project and wanting a ready-made workflow setup: session handoff, dispatch templates, independent verification |
 
 ## License
 
