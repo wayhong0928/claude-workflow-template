@@ -10,7 +10,7 @@ description: 派 subagent 前必讀必用。內含模型選型表（haiku／sonn
 
 ## 顯式指定 model
 
-- 派工時一律在 Agent tool 顯式帶 `model` 參數：`haiku`／`sonnet`／`opus`。不帶就繼承主對話的模型：主對話是 opus 時浪費額度，是 haiku 時會不自覺降級。
+- 派工時一律在 Agent tool 顯式帶 `model` 參數：`haiku`／`sonnet`／`opus`。不帶時，agent 定義檔有寫 `model` 就用定義檔的（例如 `verifier` 是 sonnet），沒寫就用預設，通常是繼承主對話的模型：主對話是 opus 時浪費額度，是 haiku 時會不自覺降級。
 - `/model` 選單裡出現的模型不一定包含在你的方案額度內。沒把握就只用上面三個。派了如果報模型不可用或額度不足，照 `.claude/rules/dispatch-and-verify.md` 的升降級路徑處理，不要原樣重試。
 - `effort` 參數只在使用者、CLAUDE.md 或本 skill 明確要求時才帶；本 skill 沒寫要帶的派工就不帶。
 
@@ -126,7 +126,7 @@ model：read-back 類（檔案在不在、欄位齊不齊、引用存不存在�
 
 subagent 很容易成為用量的大宗，其中多半是「把整份素材貼進 prompt」造成的冷啟動。派任何單次 subagent 前，先問自己兩句：
 
-1. **這件事需要全套工具嗎？** 不需要就降 haiku，或用 `tools` 白名單限制工具集，不要預設 general-purpose。
+1. **這件事需要全套工具嗎？** 不需要就降 haiku，或改派工具較少的 agent（唯讀搜尋用 `Explore`；常用的窄工具組在 `.claude/agents/` 寫定義檔、用 `tools` 欄位列白名單，例如 `verifier`），不要預設 general-purpose。
 2. **素材是要 agent 自己讀，還是我貼給它？** 能給路徑就不要把整份素材貼進派工 prompt——貼全文會讓每次派工都變成一次昂貴的冷啟動。
 
 ## 平行派工前的四項檢查
