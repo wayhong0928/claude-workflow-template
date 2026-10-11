@@ -46,6 +46,16 @@ hook 全部 fail-open：hook 自己出錯時一律放行，不會卡住你，但
 
 session_log 跟 Claude Code 內建的 [auto memory](https://code.claude.com/docs/en/memory#auto-memory) 可以並用。auto memory 預設開啟，由 Claude 自己判斷什麼值得記，官方原文是「Claude doesn't save something every session」，所以不保證記下上次做到哪。session_log 的內容由你決定、格式固定，每次開場一定注入。
 
+## 大的工作：先讓 Claude 訪談你
+
+寫一整章、設計問卷這類你自己也還沒想清楚的工作，先讓 Claude 問你，再動手。這是官方 [best practices](https://code.claude.com/docs/en/best-practices#let-claude-interview-you) 的做法，把【】換成你的工作：
+
+```text
+我要【寫第二章文獻探討】。用 AskUserQuestion 工具詳細訪談我：這章要回答什麼問題、涵蓋哪些構念和文獻、哪些不寫，還有我可能沒想到的難處。不要問顯而易見的事。問完後寫成 plan/ch2-outline.md：每節講什麼、用哪些文獻、哪些不寫，最後一段寫怎麼檢查這章寫完了。
+```
+
+大綱寫好後開一個新 session（或下 `/clear`）照著做，新的 context 只裝執行要用的東西。大綱最後一段就是下一節 plan mode 驗收條件的底稿。
+
 ## 長任務：先規劃，再用 `/goal` 跑到完成
 
 改一整章、整理一批文獻筆記這類動到很多檔案、要跑很多回合的工作，照這三步：

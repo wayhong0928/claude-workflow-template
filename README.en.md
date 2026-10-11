@@ -148,9 +148,25 @@ What `/rewind` can't recover:
 
 So keep a long-term version history separately: if you use Git, run `git init` in the project folder and ask Claude to commit after each piece of work; if you don't, at least copy the folder before a big change.
 
+## Checking citations and claims
+
+When a thesis section or a set of literature notes is done, ask Claude to send it to `verifier` to check the citations. `verifier` took no part in the writing and gets only the acceptance criteria and file paths. The more specific the criteria, the more accurate the check:
+
+```text
+Send chapters/ch2.md to verifier to check its citations:
+1. Every (Author, Year) in the text appears in references.md, and every entry in references.md is cited in the text.
+2. The claim next to each citation matches what the original paper in pdf/ says; for any mismatch, quote the sentence from the original.
+3. For each entry in references.md with a DOI, the authors, year, and title on the DOI page match what references.md says.
+```
+
+It checks entry by entry by reading files and the web, with no automated script, so:
+
+- It can't read full text behind a paywall and will mark those "can't determine". Put the PDF in the project and give its path in the criteria so it can check against the original.
+- It can miss things. For key claims going into your thesis, spot-check a few citations it marked as passing.
+
 ## Long tasks: plan first, then run to completion with `/goal`
 
-For work that touches many files, like revising a whole chapter or tidying a batch of literature notes, have Claude plan first, confirm the plan, then let it run on its own until the acceptance criteria are met. Steps are in [the "long tasks" section of docs/how-it-works.md](docs/how-it-works.md#長任務先規劃再用-goal-跑到完成) (Chinese).
+For work that touches many files, like revising a whole chapter or tidying a batch of literature notes, have Claude plan first, confirm the plan, then let it run on its own until the acceptance criteria are met. If you haven't worked out what to write yet, have Claude interview you and write an outline first. Steps are in the ["larger pieces of work"](docs/how-it-works.md#大的工作先讓-claude-訪談你) and ["long tasks"](docs/how-it-works.md#長任務先規劃再用-goal-跑到完成) sections of docs/how-it-works.md (Chinese).
 
 ## What's in the repo
 
