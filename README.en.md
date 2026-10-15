@@ -113,6 +113,22 @@ Alex Chen keeps the literature notes for a master's thesis in an Obsidian folder
 
 The session_log entry format is described (in Chinese) in [template/.claude/session-log-kit/README.md](template/.claude/session-log-kit/README.md); when each mechanism fires is covered in [docs/how-it-works.md](docs/how-it-works.md).
 
+### From delegation to acceptance
+
+```mermaid
+flowchart TD
+  A{"Delegate to a subagent?"} -- "No" --> Z["Main session does it"]
+  A -- "Yes" --> B["Load dispatch-template (once per session)<br/>state goal and motivation, acceptance criteria, report format, model"]
+  B -. "not loaded, or not reloaded after compact" .-> G["dispatch_gate.py blocks"]
+  B --> C["Subagent reports back"]
+  C --> D{"Check by the three levels"}
+  D -- "Pass" --> E["Done"]
+  D -- "Details wrong" --> F["Follow up with the same agent once"]
+  D -- "Wrong direction" --> U["Re-delegate to a stronger model<br/>with the failure record"]
+  F -- "Still fails" --> U
+  U -- "Opus fails too" --> X["Stop and let the user decide"]
+```
+
 ## Protecting raw data
 
 Lock things that must not change, such as PDFs, raw survey files, and submitted documents, with `--protect` at install time. It takes folders or files, as many times as you like:

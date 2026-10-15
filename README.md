@@ -111,6 +111,22 @@ python install.py "D:\碩論\筆記" --uninstall
 
 session_log 每筆的格式和寫法見 [template/.claude/session-log-kit/README.md](template/.claude/session-log-kit/README.md)；每個機制在什麼時候發生，見 [docs/how-it-works.md](docs/how-it-works.md)。
 
+### 派工到驗收
+
+```mermaid
+flowchart TD
+  A{"要派 subagent 嗎？"} -- "不用" --> Z["主對話自己做"]
+  A -- "要" --> B["載入 dispatch-template（每個 session 一次）<br/>寫目標與動機、驗收條件、回報格式、模型"]
+  B -. "沒載入過，或 compact 後沒重載" .-> G["dispatch_gate.py 擋下"]
+  B --> C["subagent 做完回報"]
+  C --> D{"依三級驗收"}
+  D -- "通過" --> E["完成"]
+  D -- "細節錯" --> F["續問原 agent 一次"]
+  D -- "方向錯" --> U["換更強的模型重派<br/>附失敗紀錄"]
+  F -- "還是不過" --> U
+  U -- "opus 也不過" --> X["停下來，交給使用者決定"]
+```
+
 ## 保護原始資料
 
 PDF、問卷原始檔、已送審的文件這類不能改的東西，安裝時用 `--protect` 鎖住，資料夾或檔案都可以，給幾次都行：

@@ -93,11 +93,35 @@ td:first-child { white-space: nowrap; }
 ul { padding-left: 1.3em; }
 li { margin-bottom: 6px; }
 footer { margin-top: 56px; color: var(--muted); font-size: 0.9rem; }
+.chain { margin: 16px 0 0; }
+.chain .node {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between;
+}
+.chain .main { flex: 1 1 320px; }
+.chain .side { flex: 1 1 200px; color: var(--muted); font-size: 0.92rem; border-left: 3px solid var(--line); padding-left: 10px; }
+.chain .down { color: var(--accent); font-size: 0.9rem; font-weight: 600; padding: 4px 0 4px 22px; }
 @media (max-width: 520px) {
   h1 { font-size: 1.55rem; }
   ol.flow li { padding-left: 50px; }
 }
+.themebtn {
+  position: absolute; top: 12px; right: 12px; z-index: 10;
+  width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--text);
+  font-size: 1rem; line-height: 1;
+}
+header h1 { padding-right: 44px; }
+@media print { .themebtn { display: none; } }
 </style>
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem("rm-theme");
+    if (t === "dark" || t === "light") { document.documentElement.setAttribute("data-theme", t); }
+  } catch (e) { /* 封鎖 localStorage 時照系統設定 */ }
+})();
+</script>
 </head>
 <body>
 <main>
@@ -160,6 +184,31 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.9rem; }
 </section>
 
 <section>
+  <h2>派工到驗收</h2>
+  <div class="chain" role="list" aria-label="派工到驗收的流程">
+    <div class="node" role="listitem">
+      <div class="main"><strong>要派 subagent 嗎？</strong><br>要隔離大量內容、有可獨立完成的工作包、或需要獨立驗收，至少一個成立才派。</div>
+      <div class="side">都不成立：主對話自己做。</div>
+    </div>
+    <div class="down" aria-hidden="true">↓ 要派</div>
+    <div class="node" role="listitem">
+      <div class="main"><strong>載入 <code>dispatch-template</code></strong>（每個 session 一次）<br>寫清楚目標與動機、驗收條件、回報格式，並指定模型。</div>
+      <div class="side"><span class="tag" style="margin-left:0">機制</span> 這個 session 沒載入過，或 compact 後沒重載就派，<code>dispatch_gate.py</code> 擋下。</div>
+    </div>
+    <div class="down" aria-hidden="true">↓ subagent 做完回報</div>
+    <div class="node" role="listitem">
+      <div class="main"><strong>依三級驗收</strong><br>0 級不派 verifier，1 級跑測試貼輸出，2 級派 verifier。</div>
+      <div class="side">通過：完成。</div>
+    </div>
+    <div class="down" aria-hidden="true">↓ 不過</div>
+    <div class="node" role="listitem">
+      <div class="main"><strong>方向對、細節錯：續問原 agent 一次</strong></div>
+      <div class="side">方向就錯了，或續問還是不過：換更強的模型重派，附上失敗紀錄。最多升到 opus 一輪，再不過就停下來交給使用者決定。</div>
+    </div>
+  </div>
+</section>
+
+<section>
   <h2>驗收分三級</h2>
   <div class="table-wrap">
   <table>
@@ -189,5 +238,30 @@ footer { margin-top: 56px; color: var(--muted); font-size: 0.9rem; }
 </footer>
 
 </main>
+<button class="themebtn" type="button" aria-label="切換淺色／深色"></button>
+<script>
+(function () {
+  var root = document.documentElement;
+  var btn = document.querySelector(".themebtn");
+  var mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function isDark() {
+    var cur = root.getAttribute("data-theme");
+    return cur === "dark" || (!cur && mq !== null && mq.matches);
+  }
+  function paint() {
+    var dark = isDark();
+    btn.textContent = dark ? "☀" : "☾";
+    btn.title = dark ? "切換成淺色" : "切換成深色";
+  }
+  btn.addEventListener("click", function () {
+    var next = isDark() ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    try { localStorage.setItem("rm-theme", next); } catch (e) { /* 忽略 */ }
+    paint();
+  });
+  if (mq !== null && mq.addEventListener) { mq.addEventListener("change", paint); }
+  paint();
+})();
+</script>
 </body>
 </html>
