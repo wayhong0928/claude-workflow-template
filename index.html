@@ -133,7 +133,7 @@ header h1 { padding-right: 44px; }
 <section class="fam fam-pains" aria-labelledby="fam-pains-h">
 <h2 id="fam-pains-h">你是不是卡在這裡</h2>
 <div class="fam-pain-grid">
-<div class="fam-pain"><b>每次開新對話都要重講進度</b><q>上次做到哪？哪一節還沒改？</q><p>收尾時記一筆 session_log，下次開場 hook 自動把最新一筆和待辦交給 Claude。</p><p class="fam-go"><a href="#m-relay">session_log 與 TODO 接力</a></p></div>
+<div class="fam-pain"><b>每次開新對話都要重講進度</b><q>上次做到哪？哪一節還沒改？</q><p>收尾時記一筆 session_log，下次開場 hook 自動把最新一筆全文和前兩筆的下一步交給 Claude。</p><p class="fam-go"><a href="#m-relay">session_log 與 TODO 接力</a></p></div>
 <div class="fam-pain"><b>派 subagent 做完，不知道對不對</b><q>它說改好了，我要怎麼確認？</q><p>派工前先套模板寫清楚驗收條件，產出依風險分三級，該驗的交給另一個 agent 核對。</p><p class="fam-go"><a href="#m-dispatch">派工到驗收</a><a href="#m-verify">驗收分三級</a></p></div>
 <div class="fam-pain"><b>規則寫了，Claude 還是忘</b><q>明明寫在 CLAUDE.md，怎麼又犯？</q><p>一定要發生的事改用 hook 處理，例如開場注入進度、派工前檢查有沒有載入模板。</p><p class="fam-go"><a href="#mechanisms">它加了哪些機制</a><a href="#limits">已知限制</a></p></div>
 </div>
