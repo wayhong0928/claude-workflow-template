@@ -1,0 +1,16 @@
+{
+  "home": "my-thesis",
+  "dueSoonDays": 7,
+  "staleDays": 14,
+  "maxFirstLine": 60,
+  "wslPrefix": "/mnt",
+  "planGlob": "計畫_*.md",
+  "projects": [
+    {
+      "name": "my-thesis",
+      "root": "~/projects/my-thesis",
+      "todo": ["TODO.md"],
+      "log": "session_log.md"
+    }
+  ]
+}

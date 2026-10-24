@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="362" viewBox="0 0 700 362" role="img" aria-labelledby="5-proww-t">
+<title id="5-proww-t">TODO 資料流，完整版。TODO.md、session_log 最新一筆的下一步和 goal 計畫檔，由三個事件觸發的指令處理，產出 todo_index.json、開場清單和格式警告。</title>
+<style>
+.dg-bg{fill:#f6f7f9}
+.dg-box{fill:#fff;stroke:#b9c2cc;stroke-width:1.5}
+.dg-key{fill:#e6eef6;stroke:#2f5d8a;stroke-width:1.5}
+.dg-you{fill:#e7f2ea;stroke:#4f8a5b;stroke-width:1.5}
+.dg-note{fill:none;stroke:#6b7480;stroke-width:1.2;stroke-dasharray:5 4}
+.dg-line{fill:none;stroke:#5b6573;stroke-width:1.6}
+.dg-dash{fill:none;stroke:#6b7480;stroke-width:1.4;stroke-dasharray:5 4}
+.dg-head{fill:#5b6573}
+.dg-t{fill:#1d232b;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:15px;font-weight:700}
+.dg-s{fill:#5b6573;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:12.5px}
+.dg-l{fill:#6b7480;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:12px}
+.dg-c{fill:#1d232b;font-family:Consolas,Menlo,monospace;font-size:13px;font-weight:600}
+@media (prefers-color-scheme: dark){
+.dg-bg{fill:#14181d}
+.dg-box{fill:#1c2229;stroke:#4a5663}
+.dg-key{fill:#22303d;stroke:#8fb6dd}
+.dg-you{fill:#1f2f25;stroke:#6aa97a}
+.dg-note{stroke:#8b96a3}
+.dg-line{stroke:#9aa5b1}
+.dg-dash{stroke:#8b96a3}
+.dg-head{fill:#9aa5b1}
+.dg-t,.dg-c{fill:#e4e8ed}
+.dg-s{fill:#9aa5b1}
+.dg-l{fill:#8b96a3}
+}
+</style>
+<defs><marker id="5-proww-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-bg" x="0" y="0" width="700" height="362" rx="12"/>
+<rect class="dg-box" x="10" y="10" width="170" height="308" rx="10"/>
+<text class="dg-t" x="24" y="34">讀進來的檔</text>
+<text class="dg-l" x="166" y="34" text-anchor="end">只讀</text>
+<text class="dg-s" x="24" y="56">TODO.md</text>
+<text class="dg-s" x="24" y="79">session_log 最新一筆</text>
+<text class="dg-s" x="24" y="97">的下一步</text>
+<text class="dg-s" x="24" y="120">goal 計畫檔，檔頭有到</text>
+<text class="dg-s" x="24" y="138">期日的 .md</text>
+<text class="dg-s" x="24" y="161">todo.config.json</text>
+<rect class="dg-key" x="222" y="10" width="220" height="96" rx="10"/>
+<text class="dg-c" x="236" y="34">todo_core.py index</text>
+<text class="dg-l" x="428" y="34" text-anchor="end">機制</text>
+<text class="dg-s" x="236" y="56">SessionStart、Edit 或 Write</text>
+<text class="dg-s" x="236" y="74">之後、每次送出提示時重產。</text>
+<path class="dg-line" d="M181,40 L221,40" marker-end="url(#5-proww-h)"/>
+<rect class="dg-key" x="222" y="120" width="220" height="96" rx="10"/>
+<text class="dg-c" x="236" y="144">todo_core.py render</text>
+<text class="dg-l" x="428" y="144" text-anchor="end">機制</text>
+<text class="dg-s" x="236" y="166">SessionStart 時印出開場清單。</text>
+<path class="dg-line" d="M181,150 L221,150" marker-end="url(#5-proww-h)"/>
+<rect class="dg-key" x="222" y="230" width="220" height="78" rx="10"/>
+<text class="dg-c" x="236" y="254">todo_lint.py</text>
+<text class="dg-l" x="428" y="254" text-anchor="end">機制</text>
+<text class="dg-s" x="236" y="276">Edit 或 Write 改到設定檔列的</text>
+<text class="dg-s" x="236" y="294">TODO 時檢查第一行格式。</text>
+<path class="dg-line" d="M181,260 L221,260" marker-end="url(#5-proww-h)"/>
+<rect class="dg-box" x="494" y="10" width="196" height="96" rx="10"/>
+<text class="dg-c" x="508" y="34">todo_index.json</text>
+<text class="dg-s" x="508" y="56">唯一會寫的檔。mod 只讀它，</text>
+<text class="dg-s" x="508" y="74">畫 /todo、TODO 側欄、輸入</text>
+<text class="dg-s" x="508" y="92">框上方的下一步。</text>
+<path class="dg-line" d="M443,40 L493,40" marker-end="url(#5-proww-h)"/>
+<rect class="dg-box" x="494" y="120" width="196" height="96" rx="10"/>
+<text class="dg-t" x="508" y="144">開場清單</text>
+<text class="dg-s" x="508" y="166">注入 session 開頭的</text>
+<text class="dg-s" x="508" y="184">context，超過 10,000 字元</text>
+<text class="dg-s" x="508" y="202">會截斷。</text>
+<path class="dg-line" d="M443,150 L493,150" marker-end="url(#5-proww-h)"/>
+<rect class="dg-box" x="494" y="230" width="196" height="78" rx="10"/>
+<text class="dg-t" x="508" y="254">格式警告</text>
+<text class="dg-s" x="508" y="276">只警告，不擋。</text>
+<path class="dg-line" d="M443,260 L493,260" marker-end="url(#5-proww-h)"/>
+<rect class="dg-key" x="12" y="332" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="344">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="332" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="344">靠 Claude 照規則做</text>
+</svg>

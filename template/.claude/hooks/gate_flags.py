@@ -1,53 +1,29 @@
 """dispatch_gate.py 用：判斷本 session 叫用過的 skill 還算不算數，並記錄擋下的事件。
 
-規則：同一個 session 叫用過一次就算數；之後若發生 compact（skill 內容可能被摘要掉），要重叫。
+規則：同一個 session 叫用過一次就算數；之後發生 compact 就要重叫。compact 後 skill 只留開頭
+5,000 tokens，後段可能被截掉，重叫才會完整回來。
 曾經試過「叫用後 N 分鐘內才算數」的時限，結果大部分被擋的都是同一個 session 稍早叫用過、
 skill 內容其實還在對話裡的情況，所以改成現在這樣。
 
-compact 的判斷：transcript 裡最後一筆 `"subtype":"compact_boundary"` 的時間晚於 flag 的時間。
-compact 後 session_id 與 transcript 檔不變。
+compact 的處理：PostCompact hook（compact_flag_reset.py）把該 session 的 flag 刪掉，這裡只看 flag
+在不在，不讀 transcript。手動 /compact、自動壓縮、閒置自動壓縮都會觸發 PostCompact。
 
-Fail-open：讀不到 flag 時間、transcript 或解析失敗，一律當作「算數」放行。
+Fail-open：判斷時出任何例外，一律當作「算數」放行。
 """
 import datetime
 import json
-from pathlib import Path
 
-HOOKS_DIR = Path(__file__).parent
-FLAGS_DIR = HOOKS_DIR / "skill_gate_flags"
-GATE_LOG = HOOKS_DIR / "gate_trial.log"  # 擋下的事件，方便事後檢討有沒有誤擋
-COMPACT_MARKER = b'"subtype":"compact_boundary"'
+from hook_state import state_dir
+
+STATE_DIR = state_dir()
+FLAGS_DIR = STATE_DIR / "skill_gate_flags"
+GATE_LOG = STATE_DIR / "gate_trial.log"  # 擋下的事件，方便事後檢討有沒有誤擋
 
 
-def last_compact_epoch(transcript_path):
-    """transcript 裡最後一次 compact 的時間（epoch 秒）；沒有 compact 或讀不到就回傳 None。"""
+def skill_called_in_session(session_id, skill):
+    """本 session 叫用過 skill，而且之後沒有 compact（flag 還在），就回傳 True。"""
     try:
-        data = Path(transcript_path).read_bytes()
-    except Exception:
-        return None
-    pos = data.rfind(COMPACT_MARKER)
-    if pos < 0:
-        return None
-    start = data.rfind(b"\n", 0, pos) + 1
-    end = data.find(b"\n", pos)
-    line = data[start:end if end >= 0 else len(data)]
-    try:
-        ts = json.loads(line.decode("utf-8"))["timestamp"]
-        return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-    except Exception:
-        return None
-
-
-def skill_called_in_session(session_id, skill, transcript_path):
-    """本 session 叫用過 skill，且之後沒有 compact，就回傳 True。"""
-    try:
-        flag = FLAGS_DIR / f"{session_id}__{skill}.flag"
-        if not flag.exists():
-            return False
-        if not transcript_path:
-            return True
-        compact = last_compact_epoch(transcript_path)
-        return compact is None or flag.stat().st_mtime >= compact
+        return (FLAGS_DIR / f"{session_id}__{skill}.flag").exists()
     except Exception:
         return True
 

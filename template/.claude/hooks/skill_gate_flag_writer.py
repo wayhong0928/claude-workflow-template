@@ -18,9 +18,10 @@ Fail-open：任何例外都直接放行，不影響正常呼叫。
 """
 import sys
 import json
-from pathlib import Path
 
-FLAGS_DIR = Path(__file__).parent / "skill_gate_flags"
+from hook_state import state_dir
+
+FLAGS_DIR = state_dir() / "skill_gate_flags"
 TRACKED_SKILLS = {"dispatch-template"}
 
 

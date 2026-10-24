@@ -8,10 +8,20 @@ description: 派 subagent 前必讀必用。內含模型選型表（haiku／sonn
 > 用法：選對應模板、填空、貼進 Agent tool 的 prompt。【】是填空處。
 > 通用規則：model 參數顯式指定（選型表見下一節）；每份派工 prompt 結尾都附下方「共用尾段：回報合約」，照抄不刪。
 
+**重點摘要**（對話壓縮後，skill 只留開頭約 5,000 tokens，後段可能被截掉；以下是後段各節的要點，要細節就重新叫用本 skill）：
+
+1. 派工一律帶 `model`。要指定模型的派工不用 fork，fork 用主對話的模型、不看 `model`。
+2. 每份 prompt 寫目標與動機、驗收條件，結尾附回報合約。
+3. 平行派工前查四件事：額度、共用寫入目標、明文排除的特例、跨檔案語義相依。平行上限 3。
+4. 多樣本評審要換模型，或明顯拉開 prompt 與上下文；同模型同 prompt 跑兩次不算獨立。
+5. 驗收（第 2 級，含複驗）一律派 fresh-context 的 verifier，不用 SendMessage 叫原 agent 再看一次。
+6. 收到回報先對驗收條件；不過就走規則檔的升降級路徑；教訓寫回一個地方就好。
+
 ## 顯式指定 model
 
 - 派工時一律在 Agent tool 顯式帶 `model` 參數：`haiku`／`sonnet`／`opus`。不帶時，agent 定義檔有寫 `model` 就用定義檔的（例如 `verifier` 是 sonnet），沒寫就用預設，通常是繼承主對話的模型：主對話是 opus 時浪費額度，是 haiku 時會不自覺降級。
-- `/model` 選單裡出現的模型不一定包含在你的方案額度內。沒把握就只用上面三個。派了如果報模型不可用或額度不足，照 `.claude/rules/dispatch-and-verify.md` 的升降級路徑處理，不要原樣重試。
+- `/model` 選單裡出現的模型不一定包含在你的方案額度內。沒把握就只用上面三個。派了如果報模型不可用或額度不足，照 `.claude/rules/dispatch-and-verify.md` 升降級路徑的「派出去報模型不可用或額度不足」一條處理，不要原樣重試；額度少的專案改用同一檔的「額度有限時」降級版。
+- `subagent_type: "fork"` 不吃 `model` 參數：fork 帶著主對話的完整 context，用的是主對話的模型，也不經過派工檢查。fork mode 預設開啟，Claude 可以自己選 fork，所以要指定模型的派工（haiku 批次、opus 第二意見、verifier）要明確派具名的 subagent，不要用 fork。
 - `effort` 參數只在使用者、CLAUDE.md 或本 skill 明確要求時才帶；本 skill 沒寫要帶的派工就不帶。
 
 **選型表：**

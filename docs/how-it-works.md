@@ -12,7 +12,7 @@
     ├── rules/dispatch-and-verify.md   每個 session 自動載入的規則
     ├── skills/dispatch-template/      派 subagent 時用的 prompt 模板
     ├── agents/verifier.md             負責驗收的 subagent
-    ├── hooks/                         四支 hook 和它們的測試
+    ├── hooks/                         五支 hook、兩支共用模組和測試
     └── session-log-kit/               session_log 的腳本（選裝）
 ```
 
@@ -22,10 +22,12 @@
 
 | 階段 | 發生什麼 | 機制或自律 | 在哪裡 |
 |---|---|---|---|
-| 開場 | 注入 session_log 最新 1 筆全文，加前 2 筆的標題與下一步 | 機制 | `.claude/session-log-kit/sessionstart_log.ps1` |
+| 開場 | 注入 session_log 最新 1 筆全文，加前 2 筆的標題與下一步 | 機制 | `.claude/session-log-kit/sessionstart_log.py` |
 | 開場 | Claude 用 1 到 2 句報告上次進度與待辦 | 自律 | CLAUDE.md 的接力說明 |
 | 工作中 | 預設自己做，有三種好處之一才派 subagent | 自律 | `.claude/rules/dispatch-and-verify.md` 第一原則 |
 | 派 subagent 前 | 先載入 `dispatch-template`：寫清楚目標、驗收條件、回報格式，指定模型 | 機制，沒載就擋 | `.claude/hooks/dispatch_gate.py` |
+| 派 subagent 前 | `fork` 不檢查。fork 帶著主對話的 context、用主對話的模型，不吃 `model` 參數，所以要指定模型的派工不用 fork | 自律 | 規則檔第一原則下方 |
+| 對話被壓縮後 | 手動 `/compact`、對話太長的自動壓縮、閒置自動壓縮（2.1.299 起預設開啟，超過 20 萬 token 又閒置約 54 分鐘）之後，刪掉載入紀錄，下次派工前要重新載入 `dispatch-template`。壓縮後 skill 只留開頭 5,000 tokens | 機制 | `.claude/hooks/compact_flag_reset.py`（PostCompact） |
 | 派工沒過 | 第一次先追問同一個 subagent，再不過才換更強的模型，附上失敗經過 | 自律 | 規則檔「升降級路徑」 |
 | 宣告完成前 | 依風險分三級驗收：0 級不驗、1 級跑腳本貼輸出、2 級派 `verifier` | 自律 | 規則檔「驗證不自驗」 |
 | 工作中 | 主對話超過 15 萬 token 時，提醒先補 log 再下 `/clear` | 機制，只提醒 | `.claude/hooks/context_guard.py` |
@@ -33,7 +35,7 @@
 | 收尾 | session_log 最上面補一筆，用腳本插入、檢查格式 | 自律＋腳本檢查 | `.claude/session-log-kit/add_session_log.py` |
 | 收尾 | TODO 做完的刪掉，新的待辦照格式寫 | 自律 | `TODO.md` 開頭的說明 |
 
-hook 全部 fail-open：hook 自己出錯時一律放行，不會卡住你，但壞掉時也不會有提示。
+hook 全部 fail-open，自己出錯時一律放行，不會卡住你，但壞掉時也不會有提示。
 
 ## 要不要裝 session_log
 
@@ -42,9 +44,25 @@ hook 全部 fail-open：hook 自己出錯時一律放行，不會卡住你，但
 - 查不到（Obsidian 筆記庫、論文資料夾、沒用 Git 的文件專案）：裝。不然每次開 session 都要重講一次上次做到哪。
 - 查得到（程式 repo，看 git log 和 PR 就知道）：可以不裝，待辦另外記在 `TODO.md` 就好。
 
-`install.py` 沒指定時會自己判斷：專案不在 git repo 裡就裝，在 git repo 裡就不裝。
+`install.py` 沒指定時會自己判斷，專案不在 git repo 裡就裝，在 git repo 裡就不裝。
 
 session_log 跟 Claude Code 內建的 [auto memory](https://code.claude.com/docs/en/memory#auto-memory) 可以並用。auto memory 預設開啟，由 Claude 自己判斷什麼值得記，官方原文是「Claude doesn't save something every session」，所以不保證記下上次做到哪。session_log 的內容由你決定、格式固定，每次開場一定注入。
+
+`/recap` 也容易跟 session_log 搞混。`/recap` 只回顧目前這個 session（官方 [interactive-mode](https://code.claude.com/docs/en/interactive-mode#session-recap)），跨 session 的接力還是靠 session_log。context_guard 的提醒是給 Claude 看的，你自己想知道 context 用了多少，打 `/context`（官方 [context-window](https://code.claude.com/docs/en/context-window#check-your-own-session)）。
+
+## TODO 清單怎麼產生
+
+裝了 todo plugin，`todo_core.py` 會讀各專案的 TODO.md、session_log 最新一筆的下一步、goal 計畫檔。開場清單是它每次開 session 當場整理後印出來的；`/todo`、TODO 側欄和輸入框上方的下一步讀它另外寫出的 `todo_index.json`。plugin 只寫這一個檔。
+
+<figure>
+<picture>
+<source media="(max-width: 560px)" srcset="img/5-pro-narrow.svg">
+<img src="img/5-pro-wide.svg" alt="TODO 資料流：讀進 TODO.md、session_log、goal 計畫檔與設定檔，三支腳本產生 todo_index.json、開場清單與格式警告。">
+</picture>
+<figcaption>TODO 資料流。左邊的檔只讀；todo_index.json 是唯一會寫的檔，mod 只讀它來畫畫面。</figcaption>
+</figure>
+
+TODO 第一行格式、設定檔欄位、什麼情況下不會動，見 [todo/README.md](../todo/README.md)；計畫檔和有效期檔怎麼命名、放哪，見 [conventions.md](conventions.md)。
 
 ## 大的工作：先讓 Claude 訪談你
 
@@ -61,8 +79,8 @@ session_log 跟 Claude Code 內建的 [auto memory](https://code.claude.com/docs
 改一整章、整理一批文獻筆記這類動到很多檔案、要跑很多回合的工作，照這三步：
 
 1. **先規劃**：按 `Shift+Tab` 切到 plan mode（或在訊息前加 `/plan`），請 Claude 讀檔、提計畫。plan mode 裡 Claude 只讀不改。計畫要附一份可以逐條勾選的驗收條件，例如「第二章每段都有引用」「`notes/` 每份筆記的研究問題、方法、發現三欄都填了」。寫成一段散文的計畫，請它重寫。
-2. **核准時選 auto mode**：計畫好了，Claude Code 會問你要不要執行，選「Yes, and use auto mode」（auto mode 不能用時，例如組織關掉了，這個選項會變成「Yes, auto-accept edits」）。下一步的 `/goal` 不會改權限模式，留在手動模式的話，設定沒允許的工具呼叫都會停下來問你。
-3. **設 `/goal`**：打 `/goal` 加上完成條件，Claude 會一回合接一回合做，直到另一個模型判斷條件達成。這個判斷的模型只讀對話內容，不會自己跑指令或開檔，所以條件要寫成「對話裡看得到的證據」。
+2. **核准時選 auto mode**：計畫好了，Claude Code 會問你要不要執行，選「Yes, and use auto mode」（auto mode 不能用時，例如組織關掉了，這個選項會變成「Yes, auto-accept edits」）。下一步的 `/goal` 不會改權限模式，留在手動模式的話，設定沒允許的工具呼叫都會停下來問你。auto mode 要帳號方案、模型和組織設定都允許才會出現（官方 [permission-modes](https://code.claude.com/docs/en/permission-modes)）。
+3. **設 `/goal`**：打 `/goal` 加上完成條件，Claude 會一回合接一回合做，直到另一個模型判斷條件達成。這個判斷的模型只讀對話內容，不會自己跑指令或開檔，所以條件要寫成「對話裡看得到的證據」。這個判斷每回合都會跑一次，長任務會一直耗用額度，回合上限就是用來設停損的，額度少的話設低一點。
 
 條件寫法（官方 [goal 文件](https://code.claude.com/docs/en/goal)建議要有終點、證明方式、途中不能動的東西，再加回合上限）：
 
@@ -72,8 +90,20 @@ session_log 跟 Claude Code 內建的 [auto memory](https://code.claude.com/docs
 
 小改動不用這樣做，直接交代就好。plan mode 裡第一次派 `Explore` 或 `Plan` 可能會被派工檢查擋一次，載入 `dispatch-template` 後就會放行（見 README 已知限制）。
 
+## plugin 帶了什麼、沒帶什麼
+
+plugin 裝好就生效的只有 hook、skill 和 agent。規則檔、CLAUDE.md、`permissions.deny` 和狀態列，plugin 帶不進專案，要靠 `/workflow-kit:setup` 問過你再寫，狀態列只告訴你怎麼設。官方說明見 [Plugin components](https://code.claude.com/docs/en/plugins/components)。
+
+<figure>
+<picture>
+<source media="(max-width: 560px)" srcset="img/8-plugin-scope-narrow.svg">
+<img src="img/8-plugin-scope-wide.svg" alt="plugin 帶得了 hook、skill 與 agent。帶不了規則檔、CLAUDE.md、permissions.deny 和狀態列，這四樣由 setup skill 在你同意後寫進專案，或只告訴你怎麼做。">
+</picture>
+<figcaption>plugin 帶得了 hook、skill 與 agent；規則檔、CLAUDE.md、permissions.deny 和狀態列由 setup 處理。</figcaption>
+</figure>
+
 ## 改成自己的版本
 
 - 規則寫在 `.claude/rules/dispatch-and-verify.md`，派工模板在 `.claude/skills/dispatch-template/SKILL.md`，直接改就好。同一條規則只寫在一個地方，不然改了一邊，另一邊會過時。
 - 改之前先備份或 commit 一次，改壞了才還原得回來。
-- 改了 hook 就跑 `python .claude/hooks/tests/run_tests.py`。要加自己的 hook，照現有檔案的寫法：從 stdin 讀 JSON、出錯就放行、狀態檔放在 hook 旁邊，並在測試裡補案例。
+- 改了 hook 就跑 `python .claude/hooks/tests/run_tests.py`。要加自己的 hook，照現有檔案的寫法：從 stdin 讀 JSON、出錯就放行、狀態檔路徑用 `hook_state.py` 的 `state_dir()` 取（install.py 版放在 hook 旁邊，plugin 版放在 `CLAUDE_PLUGIN_DATA` 底下依專案分的資料夾），並在測試裡補案例。

@@ -8,7 +8,7 @@
 哪些檔案：只看本回合 transcript 裡有證據的路徑，而且 mtime 晚於本回合開始——
 - Write／Edit／NotebookEdit 的目標路徑；
 - Bash／PowerShell 命令、以及本回合用 Write 寫出的 .py／.ps1 內容裡出現的完整絕對路徑。
-  Windows 路徑（C:\...、C:/...、/c/...）與 POSIX 絕對路徑（/home/...、/Users/...、/mnt/c/...）都認；
+  Windows 路徑（C:\\...、C:/...、/c/...）與 POSIX 絕對路徑（/home/...、/Users/...、/mnt/c/...）都認；
   POSIX 路徑含空白時要有引號包住才抓得到。
 命令裡用變數組出來的路徑抓不到，會漏檢；subagent 寫的檔案記在另一份 transcript，也不在檢查範圍。
 這支只求擋住常見情況，不保證全抓。
@@ -24,12 +24,14 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from hook_state import state_dir
+
 EXTS = (".md", ".json", ".py")
 WRITE_TOOLS = {"Write", "Edit", "NotebookEdit", "Bash", "PowerShell"}
 MAX_BYTES = 2_000_000
 MAX_HITS_PER_FILE = 5
 MAX_BLOCKS_PER_TURN = 2
-STATE_FILE = Path(__file__).with_name("ctrl_char_stop_state.json")
+STATE_FILE = state_dir() / "ctrl_char_stop_state.json"
 
 BAD = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x80-\x9f]|\r(?!\n)")
 # 完整絕對路徑，結尾是三種副檔名之一：

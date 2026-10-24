@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="356" viewBox="0 0 700 356" role="img" aria-labelledby="8-plugin-scopeww-t">
+<title id="8-plugin-scopeww-t">plugin 帶得了 hook、skill 與 agent。帶不了規則檔、CLAUDE.md、permissions.deny 和狀態列，這四樣由 setup skill 在你同意後寫進專案，或只告訴你怎麼做。</title>
+<style>
+.dg-bg{fill:#f6f7f9}
+.dg-box{fill:#fff;stroke:#b9c2cc;stroke-width:1.5}
+.dg-key{fill:#e6eef6;stroke:#2f5d8a;stroke-width:1.5}
+.dg-you{fill:#e7f2ea;stroke:#4f8a5b;stroke-width:1.5}
+.dg-note{fill:none;stroke:#6b7480;stroke-width:1.2;stroke-dasharray:5 4}
+.dg-line{fill:none;stroke:#5b6573;stroke-width:1.6}
+.dg-dash{fill:none;stroke:#6b7480;stroke-width:1.4;stroke-dasharray:5 4}
+.dg-head{fill:#5b6573}
+.dg-t{fill:#1d232b;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:15px;font-weight:700}
+.dg-s{fill:#5b6573;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:12.5px}
+.dg-l{fill:#6b7480;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:12px}
+.dg-c{fill:#1d232b;font-family:Consolas,Menlo,monospace;font-size:13px;font-weight:600}
+@media (prefers-color-scheme: dark){
+.dg-bg{fill:#14181d}
+.dg-box{fill:#1c2229;stroke:#4a5663}
+.dg-key{fill:#22303d;stroke:#8fb6dd}
+.dg-you{fill:#1f2f25;stroke:#6aa97a}
+.dg-note{stroke:#8b96a3}
+.dg-line{stroke:#9aa5b1}
+.dg-dash{stroke:#8b96a3}
+.dg-head{fill:#9aa5b1}
+.dg-t,.dg-c{fill:#e4e8ed}
+.dg-s{fill:#9aa5b1}
+.dg-l{fill:#8b96a3}
+}
+</style>
+<defs><marker id="8-plugin-scopeww-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-bg" x="0" y="0" width="700" height="356" rx="12"/>
+<text class="dg-l" x="10" y="20" text-anchor="start">plugin 本身帶得了</text>
+<rect class="dg-key" x="10" y="30" width="214" height="60" rx="10"/>
+<text class="dg-t" x="24" y="54">hook</text>
+<text class="dg-l" x="210" y="54" text-anchor="end">plugin 帶</text>
+<text class="dg-s" x="24" y="76">7 個 hook，裝好就生效。</text>
+<rect class="dg-key" x="243" y="30" width="214" height="60" rx="10"/>
+<text class="dg-t" x="257" y="54">skill</text>
+<text class="dg-l" x="443" y="54" text-anchor="end">plugin 帶</text>
+<text class="dg-s" x="257" y="76">dispatch-template 和 setup。</text>
+<rect class="dg-key" x="476" y="30" width="214" height="60" rx="10"/>
+<text class="dg-t" x="490" y="54">agent</text>
+<text class="dg-l" x="676" y="54" text-anchor="end">plugin 帶</text>
+<text class="dg-s" x="490" y="76">verifier。</text>
+<text class="dg-l" x="10" y="128" text-anchor="start">帶不了，由 /workflow-kit:setup 補或交給你</text>
+<rect class="dg-box" x="10" y="140" width="335" height="78" rx="10"/>
+<text class="dg-t" x="24" y="164">規則檔</text>
+<text class="dg-l" x="331" y="164" text-anchor="end">setup 補</text>
+<text class="dg-s" x="24" y="186">.claude/rules/dispatch-and-verify.md，複</text>
+<text class="dg-s" x="24" y="204">製進專案，已有就不動。</text>
+<rect class="dg-box" x="355" y="140" width="335" height="78" rx="10"/>
+<text class="dg-t" x="369" y="164">CLAUDE.md</text>
+<text class="dg-l" x="676" y="164" text-anchor="end">setup 補</text>
+<text class="dg-s" x="369" y="186">沒有就依範本新建，有就列出缺的段落問你要不要補。</text>
+<rect class="dg-box" x="10" y="230" width="335" height="78" rx="10"/>
+<text class="dg-t" x="24" y="254">鎖原始資料</text>
+<text class="dg-l" x="331" y="254" text-anchor="end">setup 補</text>
+<text class="dg-s" x="24" y="276">permissions.deny 整段列給你看，同意才寫進</text>
+<text class="dg-s" x="24" y="294">settings.json。</text>
+<rect class="dg-you" x="355" y="230" width="335" height="78" rx="10"/>
+<text class="dg-t" x="369" y="254">狀態列</text>
+<text class="dg-l" x="676" y="254" text-anchor="end">你自己做</text>
+<text class="dg-s" x="369" y="276">setup 不替你寫，只告訴你怎麼用 /statusline 設定。</text>
+<rect class="dg-key" x="12" y="326" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="338">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="326" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="338">靠 Claude 照規則做</text>
+<rect class="dg-you" x="342.8" y="326" width="22" height="14" rx="4"/>
+<text class="dg-l" x="372.8" y="338">你做或你決定</text>
+</svg>

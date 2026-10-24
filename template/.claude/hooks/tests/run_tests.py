@@ -32,8 +32,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 HOOK_FILES = [
-    "gate_flags.py", "dispatch_gate.py", "skill_gate_flag_writer.py",
-    "context_guard.py", "ctrl_char_stop.py",
+    "hook_state.py", "gate_flags.py", "dispatch_gate.py", "skill_gate_flag_writer.py",
+    "context_guard.py", "ctrl_char_stop.py", "compact_flag_reset.py",
 ]
 STATE_NAMES = ("gate_trial.log", "ctrl_char_stop_state.json", "context_guard_state.json")
 
@@ -106,15 +106,16 @@ class Sandbox:
         t = time.time() - age_s
         os.utime(f, (t, t))
 
-    def run(self, hook, payload):
+    def run(self, hook, payload, env=None):
         r = subprocess.run([sys.executable, str(self.hooks / hook)],
                            input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                           capture_output=True, timeout=60, env=self.env, cwd=str(self.work))
+                           capture_output=True, timeout=60, env=dict(self.env, **(env or {})),
+                           cwd=str(self.work))
         return r.returncode, r.stdout.decode("utf-8", errors="replace").strip(), \
             r.stderr.decode("utf-8", errors="replace").strip()
 
     def transcript(self, records):
-        # compact separators, like real transcripts (gate_flags looks for "subtype":"compact_boundary")
+        # compact separators, like real transcripts
         p = self.work / f"t{time.time_ns()}.jsonl"
         p.write_text("\n".join(json.dumps(r, ensure_ascii=False, separators=(",", ":"))
                                for r in records), encoding="utf-8")
@@ -171,6 +172,14 @@ def agent_payload(sb, sid, subagent="general-purpose", tp=None, tool="Agent"):
     return p
 
 
+def compact_payload(sid, trigger, agent_id=None):
+    p = {"hook_event_name": "PostCompact", "session_id": sid, "trigger": trigger,
+         "compact_summary": "摘要"}
+    if agent_id:
+        p["agent_id"] = agent_id
+    return p
+
+
 def test_dispatch_gate(sb):
     rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sb.sid()))
     check("dispatch_gate: 未叫用 dispatch-template -> 擋", rc == 0 and decision(out) == "deny", out[:100])
@@ -183,16 +192,24 @@ def test_dispatch_gate(sb):
     rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sb.sid(), tool="Bash"))
     check("dispatch_gate: 不是 Agent 工具 -> 放", rc == 0 and out == "", out[:100])
 
-    now = datetime.now()
-    compact = {"type": "system", "subtype": "compact_boundary", "timestamp": iso(now - timedelta(seconds=60))}
-    sid = sb.sid()
-    sb.flag(sid, "dispatch-template", age_s=120)  # flag older than the compact
-    tp = sb.transcript([user_rec(now - timedelta(seconds=300)), compact])
-    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid, tp=tp))
+    # compact：PostCompact hook 刪掉該 session 的 flag，閘門只看 flag 在不在（不讀 transcript）
+    sid, other = sb.sid(), sb.sid()
+    sb.flag(sid, "dispatch-template")
+    sb.flag(other, "dispatch-template")
+    rc, out, err = sb.run("compact_flag_reset.py", compact_payload(sid, "auto"))
+    check("compact_flag_reset: PostCompact -> 刪掉這個 session 的 flag",
+          rc == 0 and out == "" and not sb.flag_path(sid, "dispatch-template").exists(), out[:100] + err[:100])
+    check("compact_flag_reset: 別的 session 的 flag 留著", sb.flag_path(other, "dispatch-template").is_file())
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid))
     check("dispatch_gate: 叫用後發生 compact -> 擋", rc == 0 and decision(out) == "deny", out[:100])
-    sb.flag(sid, "dispatch-template", age_s=0)  # re-invoked after the compact
-    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid, tp=tp))
+    sb.flag(sid, "dispatch-template")  # re-invoked after the compact
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid))
     check("dispatch_gate: compact 後重新叫用 -> 放", rc == 0 and out == "", out[:100])
+    rc, out, _ = sb.run("compact_flag_reset.py", compact_payload(sid, "manual", agent_id="sub-1"))
+    check("compact_flag_reset: subagent 自己 compact -> 主對話的 flag 留著",
+          rc == 0 and sb.flag_path(sid, "dispatch-template").is_file(), out[:100])
+    rc, out, _ = sb.run("compact_flag_reset.py", compact_payload(sb.sid(), "manual"))
+    check("compact_flag_reset: 本來就沒有 flag -> 安靜結束", rc == 0 and out == "", out[:100])
 
 
 def test_flag_writer(sb):
@@ -304,6 +321,68 @@ def test_ctrl_char(sb):
     check("ctrl_char_stop: 引號包住、含空白與中文的路徑 -> 擋", rc == 0 and decision(out) == "block", out[:100])
 
 
+def test_plugin_data(sb):
+    """plugin 裝法：狀態寫進 CLAUDE_PLUGIN_DATA（跨更新保留），每個專案各一個子資料夾。"""
+    data = sb.root / "plugin-data"
+    projects = [sb.root / "proj-a", sb.root / "proj-b"]
+    for d in [data] + projects:
+        d.mkdir()
+    envs = [{"CLAUDE_PLUGIN_DATA": str(data), "CLAUDE_PROJECT_DIR": str(p)} for p in projects]
+    before = fingerprint(sb.hooks)
+
+    sid = sb.sid()
+    sb.run("skill_gate_flag_writer.py", {"hook_event_name": "PostToolUse", "tool_name": "Skill",
+                                         "session_id": sid, "tool_input": {"skill": "dispatch-template"}},
+           env=envs[0])
+    flags = list(data.rglob(f"{sid}__dispatch-template.flag"))
+    check("plugin: flag 寫進 CLAUDE_PLUGIN_DATA", len(flags) == 1, str(flags))
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid), env=envs[0])
+    check("plugin: 同一專案讀得到 flag -> 放", rc == 0 and out == "", out[:100])
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sb.sid()), env=envs[0])
+    check("plugin: 沒叫用 -> 擋，log 寫進 CLAUDE_PLUGIN_DATA",
+          decision(out) == "deny" and len(list(data.rglob("gate_trial.log"))) == 1, out[:100])
+    sb.run("compact_flag_reset.py", compact_payload(sid, "auto"), env=envs[1])
+    check("plugin: 別的專案 compact 不刪這個專案的 flag", len(list(data.rglob(f"{sid}__*.flag"))) == 1)
+    sb.run("compact_flag_reset.py", compact_payload(sid, "auto"), env=envs[0])
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid), env=envs[0])
+    check("plugin: compact 後 CLAUDE_PLUGIN_DATA 裡的 flag 刪掉 -> 擋",
+          not list(data.rglob(f"{sid}__*.flag")) and decision(out) == "deny", out[:100])
+
+    now = datetime.now()
+    for i, env in enumerate(envs):
+        f = sb.work / f"plugin_bad_{i}.md"
+        f.write_bytes(b"x\x08y\n")
+        recs = [user_rec(now - timedelta(seconds=30)),
+                tool_use_rec("Write", {"file_path": str(f), "content": "x"}, sb.work, now),
+                tool_result_rec(now)]
+        sb.run("ctrl_char_stop.py", {"session_id": sb.sid(), "transcript_path": str(sb.transcript(recs)),
+                                     "cwd": str(sb.work), "hook_event_name": "Stop",
+                                     "stop_hook_active": False}, env=env)
+        sb.run("context_guard.py", {"session_id": sb.sid(), "hook_event_name": "UserPromptSubmit",
+                                    "transcript_path": str(sb.transcript([usage_rec(160_000)])),
+                                    "prompt": "繼續"}, env=env)
+    for name in ("ctrl_char_stop_state.json", "context_guard_state.json"):
+        found = list(data.rglob(name))
+        check(f"plugin: 兩個專案各有自己的 {name}",
+              len(found) == 2 and len({p.parent for p in found}) == 2, str(found))
+    after = fingerprint(sb.hooks)
+    check("plugin: hook 自己資料夾的狀態檔沒被動到", before == after,
+          str([p for p in set(before) | set(after) if before.get(p) != after.get(p)]))
+
+
+def test_compile(sb):
+    """把警告當錯誤編譯每支 hook：無效的跳脫序列（如 docstring 裡的 C:\\...）在 Python 3.12 起
+    每次執行都印 SyntaxWarning，未來版本會變成 SyntaxError，hook 又是 fail-open，壞了不會有提示。"""
+    code = "import sys; compile(open(sys.argv[1], encoding='utf-8').read(), sys.argv[1], 'exec')"
+    bad = []
+    for name in HOOK_FILES:
+        r = subprocess.run([sys.executable, "-W", "error", "-c", code, str(sb.hooks / name)],
+                           capture_output=True, timeout=60)
+        if r.returncode != 0:
+            bad.append(name + ": " + r.stderr.decode("utf-8", errors="replace").strip().splitlines()[-1])
+    check("編譯: 每支 hook 把警告當錯誤也編譯得過", not bad, "; ".join(bad))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hooks-dir", type=Path, default=HERE.parent)
@@ -319,7 +398,8 @@ def main():
     before = fingerprint(hooks_dir)
     sb = Sandbox(hooks_dir, overrides)
     try:
-        for fn in (test_dispatch_gate, test_flag_writer, test_context_guard, test_ctrl_char):
+        for fn in (test_compile, test_dispatch_gate, test_flag_writer, test_context_guard, test_ctrl_char,
+                   test_plugin_data):
             fn(sb)
         # the sandbox, not the source hooks dir, must have received the block log
         log = sb.hooks / "gate_trial.log"
