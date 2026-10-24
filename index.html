@@ -120,10 +120,41 @@ header h1 { padding-right: 44px; }
   <p class="lead">給研究生用的 Claude Code 工作流程設定，裝進你自己的論文或筆記資料夾就能用。開場自動接上次進度，派 subagent 前先套派工模板，產出交給另一個 agent 驗收，另有幾支 hook 擋常見的錯。需要 Python 3，不需要會 Git。</p>
   <div class="actions">
     <a class="btn primary" href="https://github.com/wayhong0928/claude-workflow-template">到 GitHub 下載</a>
-    <a class="btn" href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">安裝步驟</a>
+    <a class="btn" href="#install">安裝步驟</a>
     <a class="btn" href="https://github.com/wayhong0928/claude-workflow-template/blob/main/docs/vs-superpowers.md">跟 Superpowers 比較</a>
   </div>
 </header>
+
+<figure class="fam fam-shot">
+  <a href="assets/img/session-start.png"><img src="assets/img/session-start.png" alt="左邊是論文資料夾裡的 session_log.md，記了三筆進度；右邊是 SessionStart hook 對這份檔案的實際輸出，最新一筆全文，前兩筆只留標題與下一步，Claude 開場就讀到" width="1200" height="821" loading="lazy"></a>
+  <figcaption>字太小的話，點圖看原尺寸。</figcaption>
+</figure>
+
+<section class="fam fam-pains" aria-labelledby="fam-pains-h">
+<h2 id="fam-pains-h">你是不是卡在這裡</h2>
+<div class="fam-pain-grid">
+<div class="fam-pain"><b>每次開新對話都要重講進度</b><q>上次做到哪？哪一節還沒改？</q><p>收尾時記一筆 session_log，下次開場 hook 自動把最新一筆和待辦交給 Claude。</p><p class="fam-go"><a href="#m-relay">session_log 與 TODO 接力</a></p></div>
+<div class="fam-pain"><b>派 subagent 做完，不知道對不對</b><q>它說改好了，我要怎麼確認？</q><p>派工前先套模板寫清楚驗收條件，產出依風險分三級，該驗的交給另一個 agent 核對。</p><p class="fam-go"><a href="#m-dispatch">派工到驗收</a><a href="#m-verify">驗收分三級</a></p></div>
+<div class="fam-pain"><b>規則寫了，Claude 還是忘</b><q>明明寫在 CLAUDE.md，怎麼又犯？</q><p>一定要發生的事改用 hook 處理，例如開場注入進度、派工前檢查有沒有載入模板。</p><p class="fam-go"><a href="#mechanisms">它加了哪些機制</a><a href="#limits">已知限制</a></p></div>
+</div>
+</section>
+
+<!-- family:flow:start -->
+<link rel="stylesheet" href="assets/family.css">
+<div class="fam fam-flow" role="region" aria-labelledby="fam-flow-h">
+<h2 id="fam-flow-h">在整套論文流程的哪一站</h2>
+<a class="fam-guide" style="--i:0" href="https://wayhong0928.github.io/mis-thesis-guide/"><b>論文指南</b><span>每一站該怎麼做，都有一頁說明</span></a>
+<ol class="fam-stages">
+<li class="fam-stage" style="--i:1"><b>找題目</b><a class="fam-chip" href="https://github.com/wayhong0928/mis-thesis-skills">thesis-toolkit</a></li>
+<li class="fam-stage" style="--i:2"><b>讀文獻</b><a class="fam-chip" href="https://wayhong0928.github.io/thesis-notes-template/">論文筆記庫範本</a></li>
+<li class="fam-stage" style="--i:3"><b>設計與分析</b><a class="fam-chip" href="https://wayhong0928.github.io/thesis-notes-template/">論文筆記庫範本</a></li>
+<li class="fam-stage" style="--i:4"><b>寫論文</b><a class="fam-chip" href="https://github.com/wayhong0928/mis-thesis-skills">thesis-toolkit</a></li>
+<li class="fam-stage" style="--i:5"><b>口試與修訂</b><a class="fam-chip" href="https://wayhong0928.github.io/md-to-slides/">md-to-slides</a></li>
+</ol>
+<div class="fam-base fam-on" style="--i:6"><b>每一站都用得到的 AI 工作環境</b><span class="fam-chip fam-here" aria-current="page">Claude Code 工作流 template<em class="fam-tag">你在這裡</em></span><a class="fam-chip" href="https://wayhong0928.github.io/ai-agent-notes/">AI Agent 筆記</a></div>
+<p class="fam-more"><a href="https://wayhong0928.github.io/mis-thesis-guide/pages/ai-thesis-stages.html">看整套流程怎麼走</a></p>
+</div>
+<!-- family:flow:end -->
 
 <section id="what">
   <h2>這是什麼、給誰</h2>
@@ -234,7 +265,7 @@ header h1 { padding-right: 44px; }
   <h2>它加了哪些機制</h2>
   <p>每張圖裡，藍底的是 hook 自動做或自動擋，忘了也會發生，白底的寫在規則裡，靠 Claude 照做。每個機制的細節見<a href="https://wayhong0928.github.io/claude-workflow-template/docs/how-it-works.html">運作方式</a>。</p>
 
-  <h3>一個 session 從開場到收尾</h3>
+  <h3 id="m-session">一個 session 從開場到收尾</h3>
 <figure class="diagram">
 <svg class="dg-wide" viewBox="0 0 700 420" role="img" aria-labelledby="fig1w-t">
 <title id="fig1w-t">一個 session 從開場到收尾的六個階段。開場注入、派工前載模板、回合結束掃控制字元由 hook 做，決定要不要派、宣告完成前驗收、收尾寫 log 靠 Claude 照規則做。</title>
@@ -346,7 +377,7 @@ header h1 { padding-right: 44px; }
 <figcaption>一個 session 的六個階段。開場注入、派工前載模板、回合結束掃控制字元由 hook 負責，其餘靠規則。各階段對應的檔案見<a href="https://wayhong0928.github.io/claude-workflow-template/docs/how-it-works.html">運作方式</a>。</figcaption>
 </figure>
 
-  <h3>派工到驗收</h3>
+  <h3 id="m-dispatch">派工到驗收</h3>
 <figure class="diagram">
 <svg class="dg-wide" viewBox="0 0 700 420" role="img" aria-labelledby="fig2w-t">
 <title id="fig2w-t">派 subagent 到驗收的流程。先問要不要派，要派就先載入 dispatch-template，subagent 回報後依三級驗收，沒過先續問原 agent，再不過換更強的模型，最多到 opus 一輪就停下來交給使用者。</title>
@@ -467,7 +498,7 @@ header h1 { padding-right: 44px; }
 <figcaption>派 subagent 到驗收。載模板這一步有 hook 把關，其餘靠規則。原理見 ai-agent-notes 的<a href="https://wayhong0928.github.io/ai-agent-notes/pages/subagent.html">Subagent 入門與實戰</a>，hook 怎麼擋見<a href="https://wayhong0928.github.io/ai-agent-notes/pages/hooks-subagents.html">Hooks 與 Subagent 設定</a>，完整規則見 <a href="https://github.com/wayhong0928/claude-workflow-template/blob/main/template/.claude/rules/dispatch-and-verify.md"><code>dispatch-and-verify.md</code></a>。</figcaption>
 </figure>
 
-  <h3>驗收分三級</h3>
+  <h3 id="m-verify">驗收分三級</h3>
 <figure class="diagram">
 <svg class="dg-wide" viewBox="0 0 700 349" role="img" aria-labelledby="fig3w-t">
 <title id="fig3w-t">驗收分三級。0 級是照抄與單行修改，不派 verifier。1 級是批次修改、程式與腳本，跑測試並貼出輸出。2 級是論文正文、公開網站內容、規則檔與報告結論，派 fresh-context 的 verifier。</title>
@@ -551,7 +582,7 @@ header h1 { padding-right: 44px; }
 <figcaption>驗收三級，拿不準就往上一級。分級背後的原則見 ai-agent-notes 的<a href="https://wayhong0928.github.io/ai-agent-notes/pages/harness.html">把 AI 代理的工作環境設計得可靠</a>。</figcaption>
 </figure>
 
-  <h3>session_log 與 TODO 接力</h3>
+  <h3 id="m-relay">session_log 與 TODO 接力</h3>
 <figure class="diagram">
 <svg class="dg-wide" viewBox="0 0 700 321" role="img" aria-labelledby="fig4w-t">
 <title id="fig4w-t">session_log 記做了什麼，TODO 記還沒做什麼。收尾時兩個檔各寫一筆，下個 session 開場 hook 只注入 session_log 的最新三筆，下一步指向 TODO 的某一條。</title>
@@ -693,6 +724,21 @@ header h1 { padding-right: 44px; }
   </ul>
   <p>每一條的細節和其他限制，見 <a href="https://github.com/wayhong0928/claude-workflow-template#已知限制">README 的已知限制</a>。</p>
 </section>
+
+<!-- family:cards:start -->
+<div class="fam fam-cards" role="region" aria-labelledby="fam-cards-h">
+<h2 id="fam-cards-h">同一套的工具</h2>
+<div class="fam-grid">
+<a class="fam-card" href="https://wayhong0928.github.io/mis-thesis-guide/"><small>網站</small><b>論文指南</b><span>研究方法、論文寫作和口試，每一站該怎麼做的說明。</span></a>
+<a class="fam-card" href="https://github.com/wayhong0928/mis-thesis-skills"><small>Claude Code 外掛</small><b>thesis-toolkit</b><span>幫你收斂題目、稽核研究問題、檢查學術寫法的 SKILL。</span></a>
+<a class="fam-card" href="https://wayhong0928.github.io/thesis-notes-template/"><small>Obsidian 範本</small><b>論文筆記庫範本</b><span>文獻筆記、構念卡和假說推導放在同一個筆記庫，寫第二、三章時直接取材。</span></a>
+<a class="fam-card" href="https://wayhong0928.github.io/md-to-slides/"><small>簡報工具</small><b>md-to-slides</b><span>用 Markdown 寫簡報，挑場合和主題就有一份範例可以改。</span></a>
+<div class="fam-card fam-here" aria-current="page"><small>Claude Code 設定</small><b>Claude Code 工作流 template</b><span>開場接上次進度，產出交給另一個 agent 驗收，論文跨很多 session 也不會斷。</span><em class="fam-tag">你在這裡</em></div>
+<a class="fam-card" href="https://wayhong0928.github.io/ai-agent-notes/"><small>網站</small><b>AI Agent 筆記</b><span>Claude、Codex 這類 AI 代理工具的概念、設定和協作方式。</span></a>
+</div>
+</div>
+<script src="assets/family.js" defer></script>
+<!-- family:cards:end -->
 
 <footer>
   <p>MIT 授權。照步驟裝不起來或 hook 誤擋，請到 <a href="https://github.com/wayhong0928/claude-workflow-template/issues">Issues</a> 回報。研究方法與論文寫作的其他資源見 <a href="https://wayhong0928.github.io/mis-thesis-guide/">mis-thesis-guide</a>。</p>
