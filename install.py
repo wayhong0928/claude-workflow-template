@@ -35,6 +35,7 @@ TPL = HERE / "template"
 MIN_PY = (3, 8)
 
 CORE_FILES = [
+    ".claude/hooks/hook_state.py",
     ".claude/hooks/dispatch_gate.py",
     ".claude/hooks/gate_flags.py",
     ".claude/hooks/skill_gate_flag_writer.py",
@@ -47,9 +48,14 @@ CORE_FILES = [
 ]
 SESSION_LOG_FILES = [
     ".claude/session-log-kit/add_session_log.py",
+    ".claude/session-log-kit/sessionstart_log.py",
+    ".claude/session-log-kit/archive_session_log.py",
+    ".claude/session-log-kit/README.md",
+]
+# 舊版裝進去的檔，現在已經不裝了；重裝或移除時一併收掉（先備份）
+LEGACY_FILES = [
     ".claude/session-log-kit/sessionstart_log.ps1",
     ".claude/session-log-kit/archive_session_log.ps1",
-    ".claude/session-log-kit/README.md",
 ]
 # hook 執行時在 .claude/hooks/ 產生的本機狀態，移除時一併刪掉
 STATE_PATHS = [
@@ -65,7 +71,8 @@ OUR_SCRIPTS = [
     "/.claude/hooks/skill_gate_flag_writer.py",
     "/.claude/hooks/context_guard.py",
     "/.claude/hooks/ctrl_char_stop.py",
-    "/.claude/session-log-kit/sessionstart_log.ps1",
+    "/.claude/session-log-kit/sessionstart_log.py",
+    "/.claude/session-log-kit/sessionstart_log.ps1",  # 舊版
 ]
 MARK_START = "<!-- claude-workflow-template:start -->"
 MARK_END = "<!-- claude-workflow-template:end -->"
@@ -106,11 +113,22 @@ def find_python():
     return None
 
 
-def find_powershell():
-    if os.name == "nt" and shutil.which("powershell"):
-        return "powershell"
-    if shutil.which("pwsh"):
-        return "pwsh"
+PLUGIN_NAME = "workflow-kit"
+
+
+def plugin_enabled_in(target):
+    """回傳已啟用本 plugin 的設定檔路徑；沒有就回傳 None。
+    兩條裝法同時裝，同一個 hook 會跑兩次，所以 plugin 已啟用就不裝。"""
+    config = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    for p in (target / ".claude" / "settings.json", target / ".claude" / "settings.local.json",
+              config / "settings.json"):
+        try:
+            enabled = json.loads(read_text(p)).get("enabledPlugins") or {}
+        except Exception:
+            continue
+        if isinstance(enabled, dict) and any(
+                str(k).split("@")[0] == PLUGIN_NAME and v for k, v in enabled.items()):
+            return p
     return None
 
 
@@ -192,15 +210,13 @@ def strip_ours(hooks):
     return out
 
 
-def add_ours(hooks, defs, py, ps):
+def add_ours(hooks, defs, py):
     for event, groups in defs.items():
         for g in groups:
             g = json.loads(json.dumps(g))
             for h in g["hooks"]:
                 if h.get("command") == "python":
                     h["command"] = py
-                elif h.get("command") == "powershell":
-                    h["command"] = ps
             hooks.setdefault(event, []).append(g)
     return hooks
 
@@ -228,12 +244,12 @@ def protect_rule(target, raw):
     return f"Edit({pattern})"
 
 
-def merged_settings(current, session_log, py, ps, protect=()):
+def merged_settings(current, session_log, py, protect=()):
     new = json.loads(json.dumps(current))
     hooks = strip_ours(new.get("hooks", {}))
-    add_ours(hooks, json.loads(read_text(TPL / "hooks-core.json")), py, ps)
+    add_ours(hooks, json.loads(read_text(TPL / "hooks-core.json")), py)
     if session_log:
-        add_ours(hooks, json.loads(read_text(TPL / "hooks-session-log.json")), py, ps)
+        add_ours(hooks, json.loads(read_text(TPL / "hooks-session-log.json")), py)
     new["hooks"] = hooks
     if protect:
         deny = new.setdefault("permissions", {}).setdefault("deny", [])
@@ -320,6 +336,11 @@ def check_target(target):
 
 def install(target, session_log, dry_run, protect=()):
     check_target(target)
+    found = plugin_enabled_in(target)
+    if found:
+        raise InstallError(f"{found} 已經啟用 {PLUGIN_NAME} plugin，同一個專案再用 install.py 裝，"
+                           "每個 hook 會跑兩次。沒有動任何檔案。要改用 install.py 的話，"
+                           f"先跑 claude plugin uninstall {PLUGIN_NAME} 再執行。")
     rules = []
     for raw in protect:  # 路徑有錯在這裡就停，什麼都還沒動
         r = protect_rule(target, raw)
@@ -329,27 +350,26 @@ def install(target, session_log, dry_run, protect=()):
     if not py:
         raise InstallError("找不到 Python 3.8 以上的指令（試過 python、python3、py）。hook 需要它，請先安裝 Python。")
     in_git = in_git_repo(target)
-    ps = find_powershell()
     if session_log is None:
         session_log = not in_git
         why = "專案不在 git repo 裡" if session_log else "專案在 git repo 裡，進度可以看 git log"
-        if session_log and not ps:
-            session_log = False
-            why = "專案不在 git repo 裡，但這台電腦沒有 PowerShell"
         print(f"session_log：{'裝' if session_log else '不裝'}（{why}；要改請加 --session-log 或 --no-session-log）")
-    if session_log and not ps:
-        raise InstallError("session_log 的開場注入要用 PowerShell，這台電腦找不到 powershell 或 pwsh。"
-                           "macOS／Linux 請先裝 PowerShell 7，或改用 --no-session-log。")
     settings_path = target / ".claude" / "settings.json"
     current = load_settings(settings_path)  # 格式有錯會在這裡停，什麼都還沒動
 
     plan = Plan(target, dry_run)
     print(f"專案資料夾：{target}")
-    print(f"hook 用的 Python 指令：{py}" + (f"；PowerShell 指令：{ps}" if session_log else ""))
+    print(f"hook 用的 Python 指令：{py}")
 
     # 1. 檔案
     files = CORE_FILES + (SESSION_LOG_FILES if session_log else [])
     counts = {"new": 0, "replace": 0, "same": 0}
+    for rel in LEGACY_FILES:
+        if (target / rel).exists():
+            plan.say(f"移除舊版的 {rel}（已改用 Python 版，舊檔先備份）")
+            plan.backup(target / rel)
+            if not dry_run:
+                (target / rel).unlink()
     for rel in files:
         src, dst = TPL / rel, target / rel
         if dst.exists():
@@ -367,7 +387,7 @@ def install(target, session_log, dry_run, protect=()):
     plan.say(f"複製檔案到 .claude/：新增 {counts['new']}、覆蓋 {counts['replace']}、內容相同略過 {counts['same']}")
 
     # 2. settings.json
-    new = merged_settings(current, session_log, py, ps, rules)
+    new = merged_settings(current, session_log, py, rules)
     old_deny = current.get("permissions", {}).get("deny", [])
     for r in rules:
         plan.say(f"保護規則：{r}" + ("（已經有了）" if r in old_deny else "（Claude 不能改這裡的檔案）"))
@@ -447,7 +467,7 @@ def install(target, session_log, dry_run, protect=()):
     if plan.backed_up:
         print(f"備份在：{plan.backup_dir.relative_to(target).as_posix()}/")
     print("安裝完成。接下來：")
-    steps = [f"在專案資料夾跑 {py} .claude/hooks/tests/run_tests.py ，最後一行要是「25/25 通過」（前後數字一樣就是全過）"]
+    steps = [f"在專案資料夾跑 {py} .claude/hooks/tests/run_tests.py ，最後一行像「31/31 通過」，前後數字一樣就是全過"]
     if cmd is None:
         steps.append("打開 CLAUDE.md，把【】填完（也可以請 Claude 一題一題問你）")
     if rules:
@@ -480,7 +500,7 @@ def uninstall(target, dry_run):
                 write_text(settings_path, dump_settings(new), newline_of(settings_path))
 
     moved = 0
-    for rel in CORE_FILES + SESSION_LOG_FILES:
+    for rel in CORE_FILES + SESSION_LOG_FILES + LEGACY_FILES:
         p = target / rel
         if p.exists():
             plan.backup(p)

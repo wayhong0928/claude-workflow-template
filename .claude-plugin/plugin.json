@@ -1,0 +1,25 @@
+{
+  "name": "workflow-kit",
+  "version": "1.0.0",
+  "description": "Claude Code 工作流起手包：派 subagent 前先載派工模板、fresh-context verifier 驗收、session_log 開場接力、context 過大提醒、控制字元檢查",
+  "author": {
+    "name": "WayHong",
+    "url": "https://github.com/wayhong0928"
+  },
+  "homepage": "https://wayhong0928.github.io/claude-workflow-template/",
+  "repository": "https://github.com/wayhong0928/claude-workflow-template",
+  "license": "MIT",
+  "keywords": ["workflow", "subagent", "verifier", "session-log"],
+  "skills": ["./template/.claude/skills/", "./plugin/skills/"],
+  "agents": ["./template/.claude/agents/verifier.md"],
+  "hooks": "./plugin/hooks.workflow.json",
+  "userConfig": {
+    "python": {
+      "type": "string",
+      "title": "Python 指令",
+      "description": "hook 用來執行 Python 的指令。Windows 通常是 python；macOS、Linux 多半是 python3。",
+      "default": "python",
+      "options": ["python", "python3", "py"]
+    }
+  }
+}

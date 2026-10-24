@@ -17,7 +17,7 @@
 Fail-open：任何例外、任何判斷不確定的情況一律放行，不阻擋正常工作。
 
 判斷規則：本 session 叫用過一次就算數，compact 後要重叫（判斷邏輯在 `gate_flags.py`）。
-擋下的事件記進同資料夾的 gate_trial.log（action: deny），方便事後檢討有沒有誤擋。
+擋下的事件記進 gate_trial.log（action: deny，位置見 hook_state.py），方便事後檢討有沒有誤擋。
 """
 import json
 import sys

@@ -6,7 +6,7 @@
 判斷：讀本 session transcript 最後一筆主對話（非 sidechain）assistant 的 usage，
 context = input + cache_read + cache_creation。
 提醒節奏：到 THRESHOLD（15 萬）提醒一次，之後每多 STEP（10 萬）再提醒一次，同一級不重複；/clear 後 context 變小，
-自然不再觸發。狀態存在同資料夾的 context_guard_state.json。
+自然不再觸發。狀態存在 context_guard_state.json（位置見 hook_state.py）。
 Fail-open：任何例外都靜默放行，不輸出。
 """
 import json
@@ -14,10 +14,12 @@ import os
 import sys
 from pathlib import Path
 
+from hook_state import state_dir
+
 THRESHOLD = 150_000
 STEP = 100_000
 TAIL_BYTES = 3_000_000
-STATE_FILE = Path(__file__).with_name("context_guard_state.json")
+STATE_FILE = state_dir() / "context_guard_state.json"
 
 
 def last_context_tokens(transcript_path):

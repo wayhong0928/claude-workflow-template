@@ -4,8 +4,8 @@
       "hooks": [
         {
           "type": "command",
-          "command": "powershell",
-          "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${CLAUDE_PROJECT_DIR}/.claude/session-log-kit/sessionstart_log.ps1"],
+          "command": "python",
+          "args": ["${CLAUDE_PROJECT_DIR}/.claude/session-log-kit/sessionstart_log.py"],
           "timeout": 10,
           "statusMessage": "讀取 session_log（最新 1 筆全文＋前 2 筆標題）..."
         }

@@ -13,7 +13,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INSTALL = ROOT / "install.py"
-HAS_PS = bool(shutil.which("powershell") if os.name == "nt" else shutil.which("pwsh"))
 
 results = []
 
@@ -59,42 +58,38 @@ def main():
     try:
         # 1. 空資料夾、裝 session_log
         p = new_project(base, "empty")
-        if HAS_PS:
-            code, out = run(p, "--session-log")
-            check("空專案安裝成功", code == 0, out)
-            check("hook 檔都在", all((p / ".claude/hooks" / n).exists() for n in
-                  ("dispatch_gate.py", "gate_flags.py", "skill_gate_flag_writer.py", "context_guard.py", "ctrl_char_stop.py")))
-            check("規則檔在 .claude/rules", (p / ".claude/rules/dispatch-and-verify.md").exists())
-            check("session-log-kit 在 .claude 底下", (p / ".claude/session-log-kit/sessionstart_log.ps1").exists())
-            s = settings(p)
-            check("settings 有 6 個 hook", our_count(s) == 6, json.dumps(s, ensure_ascii=False))
-            check("SessionStart 指到 .claude/session-log-kit",
-                  "/.claude/session-log-kit/sessionstart_log.ps1" in json.dumps(s))
-            cm = (p / "CLAUDE.md").read_text(encoding="utf-8")
-            check("新建 CLAUDE.md 含接力說明", "claude-workflow-template:start" in cm and "【" in cm)
-            check("建了 session_log.md、TODO.md", (p / "session_log.md").exists() and (p / "TODO.md").exists())
-            check("不在 git repo 就不碰 .gitignore", not (p / ".gitignore").exists())
-            check("專案根目錄只多出預期的東西",
-                  sorted(x.name for x in p.iterdir()) == [".claude", "CLAUDE.md", "TODO.md", "session_log.md"],
-                  str(sorted(x.name for x in p.iterdir())))
-            r = subprocess.run([sys.executable, str(p / ".claude/hooks/tests/run_tests.py")],
-                               capture_output=True, text=True, encoding="utf-8",
-                               env=dict(os.environ, PYTHONIOENCODING="utf-8"))
-            check("裝好的 hook 測試全過", r.returncode == 0, r.stdout[-300:])
+        code, out = run(p, "--session-log")
+        check("空專案安裝成功", code == 0, out)
+        check("hook 檔都在", all((p / ".claude/hooks" / n).exists() for n in
+              ("dispatch_gate.py", "gate_flags.py", "skill_gate_flag_writer.py", "context_guard.py", "ctrl_char_stop.py")))
+        check("規則檔在 .claude/rules", (p / ".claude/rules/dispatch-and-verify.md").exists())
+        check("session-log-kit 在 .claude 底下", (p / ".claude/session-log-kit/sessionstart_log.py").exists())
+        s = settings(p)
+        check("settings 有 6 個 hook", our_count(s) == 6, json.dumps(s, ensure_ascii=False))
+        check("SessionStart 指到 .claude/session-log-kit",
+              "/.claude/session-log-kit/sessionstart_log.py" in json.dumps(s))
+        cm = (p / "CLAUDE.md").read_text(encoding="utf-8")
+        check("新建 CLAUDE.md 含接力說明", "claude-workflow-template:start" in cm and "【" in cm)
+        check("建了 session_log.md、TODO.md", (p / "session_log.md").exists() and (p / "TODO.md").exists())
+        check("不在 git repo 就不碰 .gitignore", not (p / ".gitignore").exists())
+        check("專案根目錄只多出預期的東西",
+              sorted(x.name for x in p.iterdir()) == [".claude", "CLAUDE.md", "TODO.md", "session_log.md"],
+              str(sorted(x.name for x in p.iterdir())))
+        r = subprocess.run([sys.executable, str(p / ".claude/hooks/tests/run_tests.py")],
+                           capture_output=True, text=True, encoding="utf-8",
+                           env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+        check("裝好的 hook 測試全過", r.returncode == 0, r.stdout[-300:])
 
-            # 2. 重跑不重複
-            before = snapshot(p)
-            code, out = run(p, "--session-log")
-            after = snapshot(p)
-            check("重跑成功", code == 0, out)
-            check("重跑後 settings 仍是 6 個 hook", our_count(settings(p)) == 6)
-            check("重跑後 CLAUDE.md 接力說明只有一段",
-                  (p / "CLAUDE.md").read_text(encoding="utf-8").count("claude-workflow-template:start") == 1)
-            check("重跑不改任何檔案、不產生備份", before == after,
-                  str(set(after) ^ set(before)))
-        else:
-            print("SKIP 空專案＋session_log（這台電腦沒有 PowerShell）")
-
+        # 2. 重跑不重複
+        before = snapshot(p)
+        code, out = run(p, "--session-log")
+        after = snapshot(p)
+        check("重跑成功", code == 0, out)
+        check("重跑後 settings 仍是 6 個 hook", our_count(settings(p)) == 6)
+        check("重跑後 CLAUDE.md 接力說明只有一段",
+              (p / "CLAUDE.md").read_text(encoding="utf-8").count("claude-workflow-template:start") == 1)
+        check("重跑不改任何檔案、不產生備份", before == after,
+              str(set(after) ^ set(before)))
         # 3. 既有 settings、CLAUDE.md、git repo，不裝 session_log
         p = new_project(base, "existing")
         (p / ".git").mkdir()
@@ -118,12 +113,11 @@ def main():
         check("settings.json 有備份", len(backups) == 1)
 
         # 4. 改裝 session_log：既有 CLAUDE.md 加段落
-        if HAS_PS:
-            code, out = run(p, "--session-log")
-            cm = (p / "CLAUDE.md").read_text(encoding="utf-8")
-            check("既有 CLAUDE.md 保留原文並加接力說明",
-                  code == 0 and cm.startswith("# 我的專案\n\n原本的內容。") and "claude-workflow-template:start" in cm, out)
-            check("改裝後 6 個 hook", our_count(settings(p)) == 6)
+        code, out = run(p, "--session-log")
+        cm = (p / "CLAUDE.md").read_text(encoding="utf-8")
+        check("既有 CLAUDE.md 保留原文並加接力說明",
+              code == 0 and cm.startswith("# 我的專案\n\n原本的內容。") and "claude-workflow-template:start" in cm, out)
+        check("改裝後 6 個 hook", our_count(settings(p)) == 6)
 
         # 5. 移除
         code, out = run(p, "--uninstall")
@@ -155,12 +149,11 @@ def main():
         check("拒絕裝進 template 本身", code != 0, out)
 
         # 9. CRLF 的 CLAUDE.md 保留換行格式
-        if HAS_PS:
-            p = new_project(base, "crlf")
-            (p / "CLAUDE.md").write_bytes("# 專案\r\n\r\n內容\r\n".encode("utf-8"))
-            code, out = run(p, "--session-log")
-            raw = (p / "CLAUDE.md").read_bytes()
-            check("CRLF 檔案寫回後仍是 CRLF", code == 0 and b"\n" not in raw.replace(b"\r\n", b""), out)
+        p = new_project(base, "crlf")
+        (p / "CLAUDE.md").write_bytes("# 專案\r\n\r\n內容\r\n".encode("utf-8"))
+        code, out = run(p, "--session-log")
+        raw = (p / "CLAUDE.md").read_bytes()
+        check("CRLF 檔案寫回後仍是 CRLF", code == 0 and b"\n" not in raw.replace(b"\r\n", b""), out)
 
         # 10. 只有 AGENTS.md：新建的 CLAUDE.md 要匯入它，否則 Claude Code 會改讀 CLAUDE.md、不再讀 AGENTS.md
         p = new_project(base, "agents")
@@ -216,6 +209,49 @@ def main():
         before = snapshot(p)
         code, out = run(p, "--no-session-log")
         check("permissions.deny 不是陣列就停", code != 0 and "permissions" in out and snapshot(p) == before, out)
+
+        # 13. 已經用 plugin 裝了：兩條裝法並存會讓 hook 跑兩次，要停下說明
+        for fname in ("settings.json", "settings.local.json"):
+            p = new_project(base, "plugin-" + fname)
+            (p / ".claude").mkdir()
+            (p / ".claude" / fname).write_text(json.dumps(
+                {"enabledPlugins": {"workflow-kit@workflow-kit": True}}), encoding="utf-8")
+            before = snapshot(p)
+            code, out = run(p, "--no-session-log")
+            check(f"{fname} 已啟用 plugin 就停、不動檔案",
+                  code != 0 and "plugin" in out and snapshot(p) == before, out)
+        p = new_project(base, "plugin-disabled")
+        (p / ".claude").mkdir()
+        (p / ".claude/settings.json").write_text(json.dumps(
+            {"enabledPlugins": {"workflow-kit@workflow-kit": False}}), encoding="utf-8")
+        code, out = run(p, "--no-session-log")
+        check("plugin 設成停用時照常安裝", code == 0, out)
+
+        # 14. 舊版裝過 .ps1：重裝時收掉（先備份）、settings 換成 Python 版；開場 hook 實跑一次
+        p = new_project(base, "legacy-ps1")
+        kit = p / ".claude/session-log-kit"
+        kit.mkdir(parents=True)
+        for n in ("sessionstart_log.ps1", "archive_session_log.ps1"):
+            (kit / n).write_text("# old\n", encoding="utf-8")
+        old_hook = {"hooks": [{"type": "command", "command": "powershell", "args": [
+            "-NoProfile", "-File", "${CLAUDE_PROJECT_DIR}/.claude/session-log-kit/sessionstart_log.ps1"]}]}
+        (p / ".claude/settings.json").write_text(json.dumps({"hooks": {"SessionStart": [old_hook]}}), encoding="utf-8")
+        code, out = run(p, "--session-log")
+        s = json.dumps(settings(p))
+        check("舊 .ps1 收掉且有備份", code == 0 and not (kit / "sessionstart_log.ps1").exists() and
+              len(list((p / ".claude/backup").glob("workflow-template-*/.claude/session-log-kit/*.ps1"))) == 2, out)
+        check("SessionStart 換成 Python 版、舊的拿掉", ".ps1" not in s and "sessionstart_log.py" in s, s)
+        (p / "session_log.md").write_text("# log\n\n## 2026-10-02 | 舊\n\n**下一步**：\n- 舊的\n\n"
+                                          "## 2026-10-03 | 新\n\n**做了什麼**：\n- 新的\n", encoding="utf-8")
+        r = subprocess.run([sys.executable, str(kit / "sessionstart_log.py")], capture_output=True,
+                           env=dict(os.environ, CLAUDE_PROJECT_DIR=str(p)))
+        ctx = json.loads(r.stdout.decode("utf-8") or "{}").get("hookSpecificOutput", {}).get("additionalContext", "")
+        check("開場 hook 先放日期最新的全文、再放舊的標題與下一步",
+              0 < ctx.find("## 2026-10-03 | 新") < ctx.find("## 2026-10-02 | 舊") and "- 新的" in ctx and "- 舊的" in ctx,
+              ctx[:300])
+        r = subprocess.run([sys.executable, str(kit / "sessionstart_log.py")], capture_output=True,
+                           env=dict(os.environ, CLAUDE_PROJECT_DIR=str(base / "no-such-project")))
+        check("沒有 session_log.md 就安靜結束", r.returncode == 0 and r.stdout == b"", r.stdout[:200])
     finally:
         shutil.rmtree(base, ignore_errors=True)
 

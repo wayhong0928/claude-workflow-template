@@ -1,0 +1,22 @@
+{
+  "name": "workflow-kit",
+  "owner": {
+    "name": "wayhong0928",
+    "url": "https://github.com/wayhong0928"
+  },
+  "metadata": {
+    "description": "Claude Code 工作流起手包：派工前先載模板、做的人不驗自己的活、session 之間接力"
+  },
+  "plugins": [
+    {
+      "name": "workflow-kit",
+      "source": "./",
+      "description": "派 subagent 前要求先載 dispatch-template、fresh-context verifier、session_log 開場注入、context 過大提醒、控制字元檢查"
+    },
+    {
+      "name": "todo",
+      "source": "./todo",
+      "description": "/todo 側欄與 TODO.md 格式檢查、索引重產"
+    }
+  ]
+}

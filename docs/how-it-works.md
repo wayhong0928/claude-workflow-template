@@ -22,7 +22,7 @@
 
 | 階段 | 發生什麼 | 機制或自律 | 在哪裡 |
 |---|---|---|---|
-| 開場 | 注入 session_log 最新 1 筆全文，加前 2 筆的標題與下一步 | 機制 | `.claude/session-log-kit/sessionstart_log.ps1` |
+| 開場 | 注入 session_log 最新 1 筆全文，加前 2 筆的標題與下一步 | 機制 | `.claude/session-log-kit/sessionstart_log.py` |
 | 開場 | Claude 用 1 到 2 句報告上次進度與待辦 | 自律 | CLAUDE.md 的接力說明 |
 | 工作中 | 預設自己做，有三種好處之一才派 subagent | 自律 | `.claude/rules/dispatch-and-verify.md` 第一原則 |
 | 派 subagent 前 | 先載入 `dispatch-template`：寫清楚目標、驗收條件、回報格式，指定模型 | 機制，沒載就擋 | `.claude/hooks/dispatch_gate.py` |

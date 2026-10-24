@@ -13,9 +13,11 @@ import datetime
 import json
 from pathlib import Path
 
-HOOKS_DIR = Path(__file__).parent
-FLAGS_DIR = HOOKS_DIR / "skill_gate_flags"
-GATE_LOG = HOOKS_DIR / "gate_trial.log"  # 擋下的事件，方便事後檢討有沒有誤擋
+from hook_state import state_dir
+
+STATE_DIR = state_dir()
+FLAGS_DIR = STATE_DIR / "skill_gate_flags"
+GATE_LOG = STATE_DIR / "gate_trial.log"  # 擋下的事件，方便事後檢討有沒有誤擋
 COMPACT_MARKER = b'"subtype":"compact_boundary"'
 
 

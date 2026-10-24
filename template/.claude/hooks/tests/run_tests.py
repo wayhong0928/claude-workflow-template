@@ -32,7 +32,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 HOOK_FILES = [
-    "gate_flags.py", "dispatch_gate.py", "skill_gate_flag_writer.py",
+    "hook_state.py", "gate_flags.py", "dispatch_gate.py", "skill_gate_flag_writer.py",
     "context_guard.py", "ctrl_char_stop.py",
 ]
 STATE_NAMES = ("gate_trial.log", "ctrl_char_stop_state.json", "context_guard_state.json")
@@ -106,10 +106,11 @@ class Sandbox:
         t = time.time() - age_s
         os.utime(f, (t, t))
 
-    def run(self, hook, payload):
+    def run(self, hook, payload, env=None):
         r = subprocess.run([sys.executable, str(self.hooks / hook)],
                            input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                           capture_output=True, timeout=60, env=self.env, cwd=str(self.work))
+                           capture_output=True, timeout=60, env=dict(self.env, **(env or {})),
+                           cwd=str(self.work))
         return r.returncode, r.stdout.decode("utf-8", errors="replace").strip(), \
             r.stderr.decode("utf-8", errors="replace").strip()
 
@@ -304,6 +305,49 @@ def test_ctrl_char(sb):
     check("ctrl_char_stop: 引號包住、含空白與中文的路徑 -> 擋", rc == 0 and decision(out) == "block", out[:100])
 
 
+def test_plugin_data(sb):
+    """plugin 裝法：狀態寫進 CLAUDE_PLUGIN_DATA（跨更新保留），每個專案各一個子資料夾。"""
+    data = sb.root / "plugin-data"
+    projects = [sb.root / "proj-a", sb.root / "proj-b"]
+    for d in [data] + projects:
+        d.mkdir()
+    envs = [{"CLAUDE_PLUGIN_DATA": str(data), "CLAUDE_PROJECT_DIR": str(p)} for p in projects]
+    before = fingerprint(sb.hooks)
+
+    sid = sb.sid()
+    sb.run("skill_gate_flag_writer.py", {"hook_event_name": "PostToolUse", "tool_name": "Skill",
+                                         "session_id": sid, "tool_input": {"skill": "dispatch-template"}},
+           env=envs[0])
+    flags = list(data.rglob(f"{sid}__dispatch-template.flag"))
+    check("plugin: flag 寫進 CLAUDE_PLUGIN_DATA", len(flags) == 1, str(flags))
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid), env=envs[0])
+    check("plugin: 同一專案讀得到 flag -> 放", rc == 0 and out == "", out[:100])
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sb.sid()), env=envs[0])
+    check("plugin: 沒叫用 -> 擋，log 寫進 CLAUDE_PLUGIN_DATA",
+          decision(out) == "deny" and len(list(data.rglob("gate_trial.log"))) == 1, out[:100])
+
+    now = datetime.now()
+    for i, env in enumerate(envs):
+        f = sb.work / f"plugin_bad_{i}.md"
+        f.write_bytes(b"x\x08y\n")
+        recs = [user_rec(now - timedelta(seconds=30)),
+                tool_use_rec("Write", {"file_path": str(f), "content": "x"}, sb.work, now),
+                tool_result_rec(now)]
+        sb.run("ctrl_char_stop.py", {"session_id": sb.sid(), "transcript_path": str(sb.transcript(recs)),
+                                     "cwd": str(sb.work), "hook_event_name": "Stop",
+                                     "stop_hook_active": False}, env=env)
+        sb.run("context_guard.py", {"session_id": sb.sid(), "hook_event_name": "UserPromptSubmit",
+                                    "transcript_path": str(sb.transcript([usage_rec(160_000)])),
+                                    "prompt": "繼續"}, env=env)
+    for name in ("ctrl_char_stop_state.json", "context_guard_state.json"):
+        found = list(data.rglob(name))
+        check(f"plugin: 兩個專案各有自己的 {name}",
+              len(found) == 2 and len({p.parent for p in found}) == 2, str(found))
+    after = fingerprint(sb.hooks)
+    check("plugin: hook 自己資料夾的狀態檔沒被動到", before == after,
+          str([p for p in set(before) | set(after) if before.get(p) != after.get(p)]))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hooks-dir", type=Path, default=HERE.parent)
@@ -319,7 +363,7 @@ def main():
     before = fingerprint(hooks_dir)
     sb = Sandbox(hooks_dir, overrides)
     try:
-        for fn in (test_dispatch_gate, test_flag_writer, test_context_guard, test_ctrl_char):
+        for fn in (test_dispatch_gate, test_flag_writer, test_context_guard, test_ctrl_char, test_plugin_data):
             fn(sb)
         # the sandbox, not the source hooks dir, must have received the block log
         log = sb.hooks / "gate_trial.log"

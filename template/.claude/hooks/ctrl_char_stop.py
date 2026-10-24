@@ -24,12 +24,14 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from hook_state import state_dir
+
 EXTS = (".md", ".json", ".py")
 WRITE_TOOLS = {"Write", "Edit", "NotebookEdit", "Bash", "PowerShell"}
 MAX_BYTES = 2_000_000
 MAX_HITS_PER_FILE = 5
 MAX_BLOCKS_PER_TURN = 2
-STATE_FILE = Path(__file__).with_name("ctrl_char_stop_state.json")
+STATE_FILE = state_dir() / "ctrl_char_stop_state.json"
 
 BAD = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x80-\x9f]|\r(?!\n)")
 # 完整絕對路徑，結尾是三種副檔名之一：

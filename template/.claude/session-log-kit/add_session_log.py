@@ -91,7 +91,32 @@ def main():
         print(f"警告：寫入後檢查不符（標題 {before}→{after}，第一筆：{first[:60]}），請用 git diff 檢查")
         sys.exit(2)
     print(f"已插入：{elines[0]}（內文 {body_len} 字；標題 {before}→{after}）")
+    user_items = user_next_steps(elines)
+    if user_items:
+        print("提醒：「下一步」寫到使用者要做的事。開場只會帶出最新 3 筆 session_log，"
+              "這幾行請也寫進 TODO.md，免得被新紀錄擠掉：")
+        for ln in user_items:
+            print(f"  {ln.strip()}")
+
+
+def user_next_steps(elines):
+    """「下一步」段裡寫給使用者的行（開頭是「使用者」或「你」）。"""
+    i = next((k for k, ln in enumerate(elines) if ln.lstrip().startswith("**下一步")), None)
+    if i is None:
+        return []
+    out = []
+    for ln in elines[i + 1:]:
+        if ln.startswith("**") or ln.startswith("## ") or ln.startswith("---"):
+            break
+        if USER_RE.match(ln):
+            out.append(ln)
+    return out
+
+
+USER_RE = re.compile(r"^\s*[-*]?\s*(使用者|你)\s*[：:]")
 
 
 if __name__ == "__main__":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # 中文 Windows 預設 cp950，被工具接走輸出時會變亂碼
     main()
