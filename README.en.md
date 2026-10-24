@@ -4,11 +4,11 @@
 
 A Claude Code workflow setup for graduate students. Install it into your own project folder (thesis, literature notes, reports) and it works from there. Once installed:
 
-- **Each session picks up where the last one stopped**: Claude reads the previous log at startup and tells you in a sentence or two where things stand and what's left.
-- **Delegation has to be spelled out first**: before Claude hands work to a subagent, it must load the dispatch template and state the goal, the acceptance criteria, and the report format. If it skips the template, the call is blocked.
-- **Finished work is checked by a different agent**: important output (thesis paragraphs, anything you publish) goes to a `verifier` that took no part in making it.
-- **A few common mistakes are caught automatically**: invisible control characters written into files get blocked, and you get a reminder to save your progress when the conversation runs long.
-- **Raw data can be locked**: folders or files you name at install time (PDFs, raw survey files) can't be changed by Claude through its edit tools or `>` redirection. A script that Claude writes, such as a Python script that opens the file itself, is not blocked.
+- Each session picks up where the last one stopped. Claude reads the previous log at startup and tells you in a sentence or two where things stand and what's left.
+- Delegation has to be spelled out first. Before Claude hands work to a subagent, it must load the dispatch template and state the goal, the acceptance criteria, and the report format. If it skips the template, the call is blocked.
+- Finished work is checked by a different agent. Important output (thesis paragraphs, anything you publish) goes to a `verifier` that took no part in making it.
+- A few common mistakes are caught automatically. Invisible control characters written into files get blocked, and you get a reminder to save your progress when the conversation runs long.
+- Raw data can be locked. Folders or files you name at install time (PDFs, raw survey files) can't be changed by Claude through its edit tools or `>` redirection. A script that Claude writes, such as a Python script that opens the file itself, is not blocked.
 
 Some terms: a **hook** is a small program Claude Code runs automatically at set points (session start, before a tool call, end of a turn); it can feed Claude extra information or block an action. A **subagent** is a separate assistant Claude starts, which does one job in its own conversation and reports back. **Context** is what Claude currently remembers of this conversation; when it gets too long, `/clear` wipes it and you start fresh.
 
@@ -20,7 +20,8 @@ Intro page (Chinese): <https://wayhong0928.github.io/claude-workflow-template/>
 
 - You use Claude Code (the terminal version), and your project spans many sessions.
 - Your project is mostly writing and research: theses, literature notes, reports. Code projects work too, but for pure programming a package like [Superpowers](https://github.com/obra/superpowers) is a better fit (comparison, in Chinese: [docs/vs-superpowers.md](docs/vs-superpowers.md)).
-- Platforms: run on real hardware on native Windows; the hook and installer tests pass on WSL2 (Ubuntu); macOS has only had static checks. The hooks and session_log scripts are all Python; PowerShell is not needed.
+- Platforms: run on real hardware on native Windows; the hook and installer tests pass on WSL2 (Ubuntu); macOS hasn't been tested. The hooks and session_log scripts are all Python; PowerShell is not needed.
+- Account: Claude Code requires a login. The account types the official docs list are the paid Pro, Max, Team, and Enterprise plans, or a Claude Console account (prepaid API credits); the free plan is not among them (official [quickstart](https://code.claude.com/docs/en/quickstart)). Without a paid plan, the [one-hour quickstart](https://wayhong0928.github.io/mis-thesis-guide/pages/ai-quickstart.html) in the same series uses only the web apps.
 
 You don't need to know Git. To undo damage, see [Undoing a bad change](#undoing-a-bad-change).
 
@@ -29,12 +30,16 @@ You don't need to know Git. To undo damage, see [Undoing a bad change](#undoing-
 | Tool | What it's for | Required? | How to check | If you don't have it |
 |---|---|---|---|---|
 | Claude Code 2.1.292 or later | This setup is built for it | Yes | `claude --version` | Install per the [official guide](https://code.claude.com/docs/en/setup). To update: native install `claude update`; WinGet `winget upgrade Anthropic.ClaudeCode`; Homebrew `brew upgrade claude-code` |
-| Python 3.8 or later | All hooks, the session_log scripts, and the installer | Yes | Windows: `python --version` (or `py --version`); macOS, Linux, WSL: `python3 --version` | Windows: `winget install Python.Python.3.12`; macOS: `brew install python`; Ubuntu/WSL: `sudo apt install python3` |
+| Python 3.8 or later | All hooks, the session_log scripts, and the installer | Yes | Windows: `python --version` (or `py --version`); macOS, Linux, WSL: `python3 --version` | Windows: `winget install Python.Python.3.12`; macOS: `brew install python` (needs [Homebrew](https://brew.sh) first; if you'd rather not install it, use the installer from [python.org](https://www.python.org/downloads/)); Ubuntu/WSL: `sudo apt install python3` |
 | Git | Downloading this template for the fallback install | No | `git --version` | Download the ZIP instead |
 
 On Windows, if typing `python` opens the Microsoft Store, Python isn't installed yet; that's just a built-in shortcut.
 
-**If you use WSL**: run Claude Code and Python inside WSL, and keep the project on the WSL side. The Python command name the hooks use is set for the current environment, so a setup installed in WSL breaks when used from native Windows Claude Code, and the other way round (see [Known limitations](#known-limitations)).
+Where the version floor comes from: the features this setup uses (the `args` form for hooks and the `${user_config.*}` plugin settings) all exist by 2.1.207 at the latest. Real-hardware testing used 2.1.309 and 2.1.310; versions 2.1.292 through 2.1.308 were not tested one by one.
+
+**If the same folder is opened from two systems**: the Python command name the hooks use (`python` or `python3`) is set for the environment you install in. If the project sits on a cloud drive opened from both Windows and a Mac, or the same folder is opened from both Windows and WSL, every hook fails on the other side and the dispatch check stops working with them. In that case, use Claude Code on only one side.
+
+**If you use WSL**: run Claude Code and Python inside WSL, and keep the project on the WSL side.
 
 ## Install: let an AI install it as a plugin (recommended)
 
@@ -50,7 +55,7 @@ Please install workflow-kit (https://github.com/wayhong0928/claude-workflow-temp
 
 `--scope project` enables it only in this folder; other projects aren't affected. Always pass `--config python=`: without it, none of the hooks run. Setup creates `CLAUDE.md`, `session_log.md`, `TODO.md`, and the dispatch rules file, and asks which folders to lock. When it writes files under `.claude/`, Claude Code asks for your permission first; that's expected.
 
-**Check this yourself afterwards**: restart `claude` and type `/hooks`. You should see workflow-kit's 6 hooks (`PreToolUse`, `PostToolUse`, `UserPromptExpansion`, `UserPromptSubmit`, `Stop`, `SessionStart`).
+**Check this yourself afterwards**: restart `claude` and type `/hooks`. You should see workflow-kit's 7 hooks (`PreToolUse`, `PostToolUse`, `PostCompact`, `UserPromptExpansion`, `UserPromptSubmit`, `Stop`, `SessionStart`).
 
 ### When a work computer blocks outside plugin sources
 
@@ -77,30 +82,30 @@ Please install claude-workflow-template (https://github.com/wayhong0928/claude-w
    - Git: git --version.
 2. If Python is missing or Claude Code is too old: stop, tell me how to install or update it (Python: winget install Python.Python.3.12 on Windows, brew install python on macOS, sudo apt install python3 on Ubuntu/WSL; Claude Code depends on how it was installed: claude update for a native install, winget upgrade Anthropic.ClaudeCode for WinGet, brew upgrade claude-code for Homebrew), and ask whether to do it now. If I say no, stop here.
 3. If Git is missing: ask whether to install it (Windows: winget install Git.Git; macOS: xcode-select --install; Ubuntu/WSL: sudo apt install git). If I say no, that's fine; download the ZIP in the next step instead.
-4. Download the template into a temp folder, not into my project. With Git, use git clone --depth 1; without it, download https://github.com/wayhong0928/claude-workflow-template/archive/refs/heads/main.zip and unzip it.
+4. Download version v1.0.0 of the template into a temp folder, not into my project. With Git, use git clone --branch v1.0.0 --depth 1 https://github.com/wayhong0928/claude-workflow-template.git; without it, download https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.0.0.zip and unzip it.
 5. Ask whether I want session_log (each session automatically picks up the previous one; it adds session_log.md and TODO.md to the project). Give me a one-line recommendation: if this folder is not a git repo (for example a thesis folder or an Obsidian vault), recommend it; if it's a code repo, it can be skipped. Then ask whether there is raw data you must not change (PDFs, raw survey files, submitted documents), and if so, list the folders or files.
 6. Dry run first: python <temp folder>/install.py <my project folder> --dry-run, plus --session-log or --no-session-log; for each raw-data path from step 5, add --protect <path>. Walk me through the actions it lists; once I agree, run it again without --dry-run. Replace python with the one you found in step 1.
-7. In my project folder, run python .claude/hooks/tests/run_tests.py (again with the python from step 1). The last line should read "31/31 通過" ("通過" means passed; matching numbers mean everything passed). If it doesn't pass, paste the output to me and don't modify the hooks yourself.
+7. In my project folder, run python .claude/hooks/tests/run_tests.py (again with the python from step 1). The last line reads "N/N 通過" ("通過" means passed); if the two numbers match, everything passed. If it doesn't pass, paste the output to me and don't modify the hooks yourself.
 8. If install.py says it created a new CLAUDE.md: the file is in Traditional Chinese. Ask me one question at a time to fill in the 【】 placeholders, explaining each line in English and writing my answers in English; delete any line I can't answer.
-9. Delete the temp folder. Report what was installed, what already existed, where the backup is, and which steps failed or were skipped by me. Finally, remind me to quit Claude Code, type claude again in the project folder, and type /hooks to confirm.
+9. Delete the temp folder. Report the version installed (if you downloaded with Git, include the output of git rev-parse --short HEAD run in the temp folder before deleting it), what was installed, what already existed, where the backup is, and which steps failed or were skipped by me. Finally, remind me to quit Claude Code, type claude again in the project folder, and type /hooks to confirm.
 ```
 
-**After the AI finishes, check this yourself**: in the project folder, start `claude` again and type `/hooks`. You should see five event types: `PreToolUse`, `PostToolUse`, `UserPromptExpansion`, `UserPromptSubmit`, `Stop` (plus `SessionStart` if you installed session_log).
+**After the AI finishes, check this yourself**: in the project folder, start `claude` again and type `/hooks`. You should see six event types: `PreToolUse`, `PostToolUse`, `PostCompact`, `UserPromptExpansion`, `UserPromptSubmit`, `Stop` (plus `SessionStart` if you installed session_log).
 
 ### Without an AI: run install.py yourself
 
-The commands below use Windows as the example. On macOS, Linux, and WSL, replace `python` with `python3` and write paths like `~/thesis/notes`.
+The commands below assume the project folder is `thesis-notes` in your home folder (`~` means your home folder and works on Windows, macOS, and Linux); replace it with your own. If the path has spaces, wrap the whole path in quotes. On macOS, Linux, and WSL, replace `python` with `python3`.
 
-1. Download: click the green **Code** button at the top of this page → **Download ZIP**, and unzip it anywhere (not inside your project). If you use Git, `git clone` works too.
+1. Download the [v1.0.0 ZIP](https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.0.0.zip) and unzip it anywhere (not inside your project). If you use Git, `git clone --branch v1.0.0 --depth 1` works too.
 2. Open a terminal in the unzipped folder (Windows: right-click an empty spot in the folder and choose "Open in Terminal"; macOS: open Terminal, type `cd ` with a trailing space, drag the folder into the window, and press Enter; Linux, WSL: `cd` into it), then do a dry run (replace the path with your project):
 
    ```
-   python install.py "D:\thesis\notes" --session-log --dry-run
+   python install.py ~/thesis-notes --session-log --dry-run
    ```
 
    It lists how many files it will add, which files it will overwrite, and which settings it will change, without touching anything. To skip session_log, replace `--session-log` with `--no-session-log`; if you give neither, it decides for you (it installs session_log when the project isn't in a git repo). If you have raw data that must not change, add options like `--protect pdf` (see [Protecting raw data](#protecting-raw-data)).
 3. If it all looks right, run it again without `--dry-run`.
-4. In the terminal, `cd "D:\thesis\notes"` to switch to your project folder and run `python .claude/hooks/tests/run_tests.py`. The last line should read "31/31 通過" ("通過" means passed; matching numbers mean everything passed).
+4. In the terminal, `cd ~/thesis-notes` to switch to your project folder and run `python .claude/hooks/tests/run_tests.py`. The last line reads "N/N 通過" ("通過" means passed); if the two numbers match, everything passed.
 5. Open `CLAUDE.md` in your project and fill in the 【】 placeholders (if install.py created it).
 6. In the project folder, type `claude`, then `/hooks` to confirm.
 
@@ -108,26 +113,32 @@ The commands below use Windows as the example. On macOS, Linux, and WSL, replace
 
 - Copies the files under `template/.claude/` into your project's `.claude/`.
 - Merges the hook settings into `.claude/settings.json`. Your existing settings stay; it only adds these entries. If you passed `--protect`, it also adds protection rules to `permissions.deny` in the same file.
+- Installs the to-do feature only when you pass `--todo` (off by default, so nothing extra prints at session start): copies the two scripts from `todo/scripts/` into `.claude/todo/` and adds two hooks to settings.json, one that lists your to-dos at session start and one that checks the first-line format when a TODO file is edited. The list reads `todo.config.json` in the Claude Code config folder (format in [todo/README.md](todo/README.md)); until that file exists, session start prints a single line saying the config file is missing. That line mentions `/workflow-kit:setup`, which is a plugin command, so on this route write the config by hand following todo/README.md.
 - Creates a `CLAUDE.md` only if the project doesn't have one. If the project already has an `AGENTS.md`, the first line of the new CLAUDE.md is `@AGENTS.md`, which imports it; without that line, Claude Code stops reading AGENTS.md automatically once a CLAUDE.md exists. When session_log is installed, it appends a handoff section to the end of CLAUDE.md, wrapped in `<!-- claude-workflow-template:start -->` and `<!-- claude-workflow-template:end -->` markers.
 - When session_log is installed, creates `session_log.md` and `TODO.md` only if they don't exist.
-- If the project is in a git repo, adds the local state files the hooks create to `.gitignore`.
+- If the project is in a git repo, adds the local state files the hooks create and the install backup folder `.claude/backup/` to `.gitignore`.
 
-Before overwriting or modifying anything, it backs up the old files to `.claude/backup/workflow-template-<timestamp>/`. Running it again doesn't add settings twice, so to update later, download the new version and run it again.
+Before overwriting or modifying anything (including `.gitignore`), it backs up the old files to `.claude/backup/workflow-template-<timestamp>/`. Running it again doesn't add settings twice, so to update later, download the new version and run it again.
 
 ### Uninstalling
 
 ```
-python install.py "D:\thesis\notes" --uninstall
+python install.py ~/thesis-notes --uninstall
 ```
 
-This removes the template's hooks from settings.json, the files it installed in `.claude/`, and the marked section in CLAUDE.md. Protection rules in `permissions.deny` are left in place so your raw data stays protected; delete them from settings.json yourself if you no longer need them. `CLAUDE.md`, `session_log.md`, and `TODO.md` hold your content and are not deleted. If settings.json held only these hooks, you're left with a file containing `{}`, which you can delete. `.claude/backup/` holds the backups made before install and uninstall; delete it once you're sure you don't need them.
+Add `--dry-run` to see what it will do first. Uninstalling does the following, and backs up to `.claude/backup/` before deleting or changing anything:
+
+- Removes this template's hooks from settings.json. If what's left matches the backup taken before install, it puts that backup back as it was (formatting unchanged); if the file was created by the install and is empty once the hooks are gone, it deletes it. Protection rules in `permissions.deny` are left in place so your raw data stays protected; delete them from settings.json yourself if you no longer need them.
+- Deletes the files it installed in `.claude/` and the hooks' state files. If you installed with `--todo`, `.claude/todo/` and its two hooks go too (`todo.config.json` lives in the config folder and is left alone). If an earlier backup holds an old file at the same path (possibly a file of the same name you had before installing), it lists the location at the end; copy it back yourself if you want it.
+- Removes the marked section from CLAUDE.md. If `CLAUDE.md`, `session_log.md`, or `TODO.md` is still the template created at install and you haven't changed it, it deletes it; anything you changed is your content and is kept.
+- Removes the hook state lines from `.gitignore`. The `.claude/backup/` line stays so `git add .` doesn't pick up the backups; once you're sure you don't need the backup folder, delete it and that line together.
 
 ## Using it day to day
 
-Alex Chen keeps the literature notes for a master's thesis in an Obsidian folder, without Git.
+Wang Xiaoming keeps the literature notes for a master's thesis in an Obsidian folder, without Git.
 
 1. Install as above, with session_log. Fill in CLAUDE.md like this:
-   - What this project is: "You are Alex Chen's literature-notes assistant. Project goal: every paper read has a note covering its research question, method, and main findings."
+   - What this project is: "You are Wang Xiaoming's literature-notes assistant. Project goal: every paper read has a note covering its research question, method, and main findings."
    - Rules that must not be broken: "All citations in APA 7th edition." `pdf/` must not change, so `--protect pdf` was added at install time and Claude Code blocks Claude's edits to it, whether or not Claude remembers the rule.
 2. Always start `claude` in the notes folder, or the hooks and CLAUDE.md won't load.
 3. At startup Claude says where the last session left off. Give it work as usual.
@@ -142,7 +153,7 @@ The session_log entry format is described (in Chinese) in [template/.claude/sess
 flowchart TD
   A{"Delegate to a subagent?"} -- "No" --> Z["Main session does it"]
   A -- "Yes" --> B["Load dispatch-template (once per session)<br/>state goal and motivation, acceptance criteria, report format, model"]
-  B -. "not loaded, or not reloaded after compact" .-> G["dispatch_gate.py blocks"]
+  B -. "not loaded, or not reloaded after the conversation was compacted (auto-compaction included)" .-> G["dispatch_gate.py blocks"]
   B --> C["Subagent reports back"]
   C --> D{"Check by the three levels"}
   D -- "Pass" --> E["Done"]
@@ -157,7 +168,7 @@ flowchart TD
 Lock things that must not change, such as PDFs, raw survey files, and submitted documents, with `--protect` at install time. It takes folders or files, as many times as you like:
 
 ```
-python install.py "D:\thesis\notes" --session-log --protect pdf --protect "data\survey_raw.csv"
+python install.py ~/thesis-notes --session-log --protect pdf --protect data/survey_raw.csv
 ```
 
 It adds this to `.claude/settings.json`:
@@ -180,7 +191,7 @@ Claude Code saves a checkpoint each time you send a message. If a file gets dama
 
 What `/rewind` can't recover:
 
-- Files Claude changed through commands (`rm`, `mv`, `cp`, scripts writing files). Only changes made with its edit tools are tracked.
+- Files changed only by commands (`rm`, `mv`, `cp`, `sed -i`, scripts writing files). If Claude edited a file with its edit tools first, later command changes to that file are restored along with it.
 - Files changed by a subagent, in most cases.
 - Files you changed yourself outside Claude Code.
 - Checkpoint file snapshots are cleaned up after about 30 days by default.
@@ -216,19 +227,21 @@ todo/                      /todo side panel (a second, optional plugin)
 install.py                 fallback install: install and uninstall
 template/                  files shared by both install routes
   .claude/
-    hooks/                 four hooks, a shared module, tests
+    hooks/                 five hooks, two shared modules, tests
     skills/dispatch-template/  dispatch prompt templates, model selection table
     agents/verifier.md     the subagent that does acceptance checks
     rules/dispatch-and-verify.md  when to delegate to a subagent, how to verify
     session-log-kit/       session_log injection, writing, and archiving scripts
   hooks-core.json          hook settings install.py merges into settings.json
   hooks-session-log.json   same, for session_log
+  hooks-todo.json          same, for --todo
   CLAUDE.md.template       used when creating a new CLAUDE.md
   session_log.md.template, TODO.md.template
 docs/
   how-it-works.md          the order things happen in a session, whether to install session_log, how to make your own version
+  conventions.md           conventions for file naming, expiry dates, the out folder, and archiving finished files
   vs-superpowers.md        how this differs from Superpowers
-tests/test_install.py      tests for install.py
+tests/test_install.py      tests for install.py (run python tests/test_install.py in the repo folder)
 index.html                 intro page
 README.md                  this README in Traditional Chinese
 README.en.md               this README in English
@@ -242,7 +255,11 @@ Starting `claude` inside this repo's folder doesn't enable any hooks. Everything
 - All hooks fail open: on an error they let the action through so they never block you, but you also get no warning when one breaks. Run the tests after changing a hook.
 - `ctrl_char_stop.py` only checks files whose full path appears in the transcript. Paths built from variables inside a command are missed, and on macOS and Linux a path containing spaces is caught only if it's quoted. Files written by a subagent are recorded in a separate transcript and aren't checked either. It blocks at most once per turn.
 - Even the built-in `Explore` and `Plan` subagents need `dispatch-template` loaded before they can be dispatched (only `fork` is exempt), so the first dispatch after entering plan mode may be blocked once; after the template loads, it goes through.
-- The Python command name the hooks use is set for the environment you install in (often `python` on Windows, `python3` on macOS and Linux). The plugin keeps it in `--config python=`, which you can change with `/plugin configure workflow-kit@workflow-kit`; install.py writes it into `.claude/settings.json`. If the same project folder is opened from both Windows and WSL, or synced between Windows and a Mac through a cloud drive, every hook fails on the other side and the dispatch check stops working with them.
+- `fork` is exempt from the check and also ignores the `model` parameter: a fork carries the main conversation's full context and uses the main conversation's model. Fork mode is on by default (in the interactive terminal since 2.1.232), and Claude can decide to fork on its own, so "spell it out before delegating" and "pick a model to save quota" don't apply to forks. The rules file says that delegations that need a specific model (haiku batches, an opus second opinion, verifier) shouldn't use fork (official [sub-agents](https://code.claude.com/docs/en/sub-agents#how-forks-differ-from-other-subagents)).
+- After the conversation is compacted, `dispatch-template` has to be loaded again before delegating. That covers a manual `/compact`, automatic compaction when the conversation gets too long, and idle compaction. Idle compaction is on by default since 2.1.299: it happens when the conversation is over 200,000 tokens and you've been away for about 54 minutes, so the first delegation after you come back may be blocked once; it goes through after the template loads. After compaction a skill keeps only its first 5,000 tokens, and reloading brings back the full content (official [skills](https://code.claude.com/docs/en/skills#skill-content-lifecycle)).
+- The hook scripts and `.claude/settings.json` run automatically every turn, and the install doesn't add deny rules for them. Claude Code already treats `.claude/` as a protected path: in default and acceptEdits modes it always asks before a write, in auto mode a classifier reviews the write, and allow rules in settings can't pre-approve it (official [permission-modes](https://code.claude.com/docs/en/permission-modes#protected-paths)). Adding deny rules on top would also block you from asking Claude to change settings, and block setup from writing protection rules. When Claude wants to change a file under `.claude/`, look at what it's changing before you approve.
+- Quota: by default the rules send second opinions and escalations to opus, verifier always runs at `effort: high`, and `/goal` has another model check the condition every turn. These all use more quota. If your quota is small, switch to the downgraded rules in the "額度有限時" (limited quota) section of the rules file; what to do when a dispatch reports that a model is unavailable or the quota is used up is also in the rules file.
+- The Python command name the hooks use is set for the environment you install in (often `python` on Windows, `python3` on macOS and Linux). The plugin keeps it in `--config python=`, which you can change with `/plugin configure workflow-kit@workflow-kit`; install.py writes it into `.claude/settings.json`. For a folder opened from two systems, see [Before installing](#before-installing-check-your-environment).
 - What's been tested on real hardware: Claude Code itself only on native Windows; the hook and installer tests on Windows and WSL2 (Ubuntu); macOS not yet.
 - `--protect` rules can't block a script that opens a file and writes to it itself (see [Protecting raw data](#protecting-raw-data)). If a path contains `*`, `?`, `[`, or `]`, install.py won't write the rule for you; add it by hand.
 - Claude Code only. Codex can run the install for you, but it doesn't read `.claude/`: rules go in `AGENTS.md`, skills in `.agents/skills/`, hooks in `.codex/hooks.json`. The dispatch check depends on Claude Code's Skill tool events, and the control-character check reads Claude Code's transcript (Codex's official docs say its transcript format is not a stable interface), so these two hooks can't simply be moved over.

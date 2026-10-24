@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="350" height="640" viewBox="0 0 350 640" role="img" aria-labelledby="6-lifecyclenn-t">
+<title id="6-lifecyclenn-t">有效期檔案的生命週期。建檔時帶到期日，到期前 3 天開場清單提醒，到期後照檔頭寫的動作處理，處理完搬進已結案資料夾，再用舊路徑搜尋一次，更新還在引用的檔案。放在 out 資料夾的檔不會被掃進清單。</title>
+<style>
+.dg-bg{fill:#f6f7f9}
+.dg-box{fill:#fff;stroke:#b9c2cc;stroke-width:1.5}
+.dg-key{fill:#e6eef6;stroke:#2f5d8a;stroke-width:1.5}
+.dg-you{fill:#e7f2ea;stroke:#4f8a5b;stroke-width:1.5}
+.dg-note{fill:none;stroke:#6b7480;stroke-width:1.2;stroke-dasharray:5 4}
+.dg-line{fill:none;stroke:#5b6573;stroke-width:1.6}
+.dg-dash{fill:none;stroke:#6b7480;stroke-width:1.4;stroke-dasharray:5 4}
+.dg-head{fill:#5b6573}
+.dg-t{fill:#1d232b;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:15px;font-weight:700}
+.dg-s{fill:#5b6573;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:12.5px}
+.dg-l{fill:#6b7480;font-family:"Noto Sans TC","Microsoft JhengHei","PingFang TC",sans-serif;font-size:12px}
+.dg-c{fill:#1d232b;font-family:Consolas,Menlo,monospace;font-size:13px;font-weight:600}
+@media (prefers-color-scheme: dark){
+.dg-bg{fill:#14181d}
+.dg-box{fill:#1c2229;stroke:#4a5663}
+.dg-key{fill:#22303d;stroke:#8fb6dd}
+.dg-you{fill:#1f2f25;stroke:#6aa97a}
+.dg-note{stroke:#8b96a3}
+.dg-line{stroke:#9aa5b1}
+.dg-dash{stroke:#8b96a3}
+.dg-head{fill:#9aa5b1}
+.dg-t,.dg-c{fill:#e4e8ed}
+.dg-s{fill:#9aa5b1}
+.dg-l{fill:#8b96a3}
+}
+</style>
+<defs><marker id="6-lifecyclenn-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-bg" x="0" y="0" width="350" height="640" rx="12"/>
+<rect class="dg-box" x="10" y="10" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="34">1 建檔帶到期</text>
+<text class="dg-l" x="326" y="34" text-anchor="end">你或 Claude</text>
+<text class="dg-s" x="24" y="56">檔頭寫「到期 YYYY-MM-DD」，再用一句話寫「到期</text>
+<text class="dg-s" x="24" y="74">後」要做什麼。</text>
+<path class="dg-line" d="M50,88 L50,108" marker-end="url(#6-lifecyclenn-h)"/>
+<rect class="dg-key" x="10" y="110" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="134">2 3 天內提醒</text>
+<text class="dg-l" x="326" y="134" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="156">開場清單列出 3 天內到期或已過期的檔，只提醒，不</text>
+<text class="dg-s" x="24" y="174">動檔案。</text>
+<path class="dg-line" d="M50,188 L50,208" marker-end="url(#6-lifecyclenn-h)"/>
+<rect class="dg-box" x="10" y="210" width="330" height="60" rx="10"/>
+<text class="dg-t" x="24" y="234">3 到期後動作</text>
+<text class="dg-l" x="326" y="234" text-anchor="end">你決定</text>
+<text class="dg-s" x="24" y="256">照檔頭那句話處理，例如刪、改寫、或轉成正式文件。</text>
+<path class="dg-line" d="M50,270 L50,290" marker-end="url(#6-lifecyclenn-h)"/>
+<rect class="dg-box" x="10" y="292" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="316">4 搬進已結案</text>
+<text class="dg-l" x="326" y="316" text-anchor="end">你或 Claude</text>
+<text class="dg-s" x="24" y="338">處理完的檔搬進「備份」或「歸檔」資料夾，掃描時會</text>
+<text class="dg-s" x="24" y="356">跳過這兩個。</text>
+<path class="dg-line" d="M50,370 L50,390" marker-end="url(#6-lifecyclenn-h)"/>
+<rect class="dg-box" x="10" y="392" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="416">5 搜尋舊路徑</text>
+<text class="dg-l" x="326" y="416" text-anchor="end">你或 Claude</text>
+<text class="dg-s" x="24" y="438">用舊檔名或舊路徑搜尋一次，把還在引用它的檔案一併</text>
+<text class="dg-s" x="24" y="456">更新。</text>
+<rect class="dg-note" x="10" y="492" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="516">out 資料夾</text>
+<text class="dg-s" x="24" y="538">暫時的輸出放在 out/ 底下。掃描有效期檔案時會跳過</text>
+<text class="dg-s" x="24" y="556">它，不會被當成待處理的檔。</text>
+<rect class="dg-key" x="12" y="588" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="600">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="588" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="600">靠 Claude 照規則做</text>
+<rect class="dg-you" x="12" y="610" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="622">你做或你決定</text>
+</svg>

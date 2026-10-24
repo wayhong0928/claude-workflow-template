@@ -4,11 +4,11 @@
 
 給研究生用的 Claude Code 工作流程設定，裝進你自己的專案資料夾（論文、文獻筆記、報告）就能用。裝好之後：
 
-- **開 session 會接上次的進度**：Claude 開場先讀上次的紀錄，用一兩句話告訴你做到哪、還剩什麼。
-- **派 subagent 前要先寫清楚**：Claude 要把工作交給 subagent 時，得先載入派工模板，寫明目標、驗收條件和回報格式；沒載入就會被擋下。
-- **做完的東西由另一個 agent 驗收**：重要的產出（論文段落、對外發布的內容）交給沒參與製作的 `verifier` 檢查，做的人不驗自己的活。
-- **幾個常見錯誤有自動把關**：檔案裡混進看不見的控制字元會被擋下；對話太長時會提醒你先存進度。
-- **原始資料可以上鎖**：安裝時指定的資料夾或檔案（PDF、問卷原始檔），Claude 用編輯工具或 `>` 重導向都改不了（Python 等腳本自己開檔寫入擋不到）。
+- 開 session 會接上次的進度。Claude 開場先讀上次的紀錄，用一兩句話告訴你做到哪、還剩什麼。
+- 派 subagent 前要先寫清楚。Claude 要把工作交給 subagent 時，得先載入派工模板，寫明目標、驗收條件和回報格式；沒載入就會被擋下。
+- 做完的東西由另一個 agent 驗收。重要的產出（論文段落、對外發布的內容）交給沒參與製作的 `verifier` 檢查，做的人不驗自己的活。
+- 幾個常見錯誤有自動把關。檔案裡混進看不見的控制字元會被擋下；對話太長時會提醒你先存進度。
+- 原始資料可以上鎖。安裝時指定的資料夾或檔案（PDF、問卷原始檔），Claude 用編輯工具或 `>` 重導向都改不了（Python 等腳本自己開檔寫入擋不到）。
 
 幾個名詞：**hook** 是 Claude Code 在特定時間點（開場、使用工具前、回合結束）自動執行的小程式，可以補充資訊給 Claude，也可以擋下動作。**subagent** 是 Claude 另外開的一個助手，在自己的對話裡做完一件事再回報。**context** 是 Claude 目前這段對話記得的內容，太長時要用 `/clear` 清掉重來。
 
@@ -18,7 +18,8 @@
 
 - 用 Claude Code（終端機版），專案會跨很多個 session。
 - 專案以寫作和研究為主：論文、文獻筆記、報告。程式專案也能用，但純寫程式的話，[Superpowers](https://github.com/obra/superpowers) 這類套件比較合適（差異見 [docs/vs-superpowers.md](docs/vs-superpowers.md)）。
-- 平台：Windows 原生在實機上跑過；WSL2（Ubuntu）跑過 hook 與安裝程式的測試；macOS 只做過靜態檢查。hook 和 session_log 的腳本都是 Python，不需要 PowerShell。
+- 平台：Windows 原生在實機上跑過；WSL2（Ubuntu）跑過 hook 與安裝程式的測試；macOS 沒測過。hook 和 session_log 的腳本都是 Python，不需要 PowerShell。
+- 帳號：Claude Code 要登入。官方列的帳號類型是 Pro、Max、Team、Enterprise 付費方案，或 Claude Console（API 預付額度），免費方案不在其中（官方 [quickstart](https://code.claude.com/docs/en/quickstart)）。沒有付費方案的話，同系列的[一小時上手](https://wayhong0928.github.io/mis-thesis-guide/pages/ai-quickstart.html)只用網頁版。
 
 不需要會 Git。改壞了怎麼還原，見[改壞了怎麼還原](#改壞了怎麼還原)。
 
@@ -27,12 +28,16 @@
 | 工具 | 用來做什麼 | 必要嗎 | 怎麼檢查 | 沒有的話 |
 |---|---|---|---|---|
 | Claude Code 2.1.292 以上 | 這套設定就是給它用的 | 必要 | `claude --version` | 照[官方說明](https://code.claude.com/docs/en/setup)安裝。更新：原生安裝用 `claude update`，WinGet 裝的用 `winget upgrade Anthropic.ClaudeCode`，Homebrew 裝的用 `brew upgrade claude-code` |
-| Python 3.8 以上 | 所有 hook、session_log 腳本、安裝程式 | 必要 | Windows：`python --version`（或 `py --version`）；macOS、Linux、WSL：`python3 --version` | Windows：`winget install Python.Python.3.12`；macOS：`brew install python`；Ubuntu／WSL：`sudo apt install python3` |
+| Python 3.8 以上 | 所有 hook、session_log 腳本、安裝程式 | 必要 | Windows：`python --version`（或 `py --version`）；macOS、Linux、WSL：`python3 --version` | Windows：`winget install Python.Python.3.12`；macOS：`brew install python`（要先裝 [Homebrew](https://brew.sh)，不想裝的話用 [python.org](https://www.python.org/downloads/) 的安裝檔）；Ubuntu／WSL：`sudo apt install python3` |
 | Git | 用備用裝法時下載這個 template | 不必要 | `git --version` | 改用下載 ZIP |
 
 Windows 上打 `python` 如果跳出 Microsoft Store，代表還沒裝 Python，那只是系統內建的捷徑。
 
-**用 WSL 的話**：Claude Code、Python 都在 WSL 裡面跑，專案也放在 WSL 這一側。hook 用的 Python 指令名是照當下環境設的，在 WSL 裝好的設定拿到 Windows 原生的 Claude Code 用會失效，反過來也一樣（見[已知限制](#已知限制)）。
+版本門檻的依據：用到的功能（hook 的 `args` 寫法、plugin 設定值 `${user_config.*}`）最晚在 2.1.207 就有；實機測試用的是 2.1.309 和 2.1.310，2.1.292 到 2.1.308 之間沒有逐版測過。
+
+**同一個資料夾在兩種系統開的話**：hook 用的 Python 指令名（`python` 或 `python3`）是照安裝當下的環境設的。專案放在雲端硬碟、Windows 和 Mac 兩邊都開，或同一個資料夾從 Windows 和 WSL 都開，另一邊的 hook 會全部失敗，派工檢查也跟著失效。這種情況只在其中一邊用 Claude Code。
+
+**用 WSL 的話**：Claude Code、Python 都在 WSL 裡面跑，專案也放在 WSL 這一側。
 
 ## 安裝：讓 AI 幫你裝成 plugin（建議）
 
@@ -48,7 +53,7 @@ Windows 上打 `python` 如果跳出 Microsoft Store，代表還沒裝 Python，
 
 `--scope project` 只在這個資料夾啟用，別的專案不受影響。`--config python=` 一定要給，沒設的話 hook 全都不會跑。setup 會建 `CLAUDE.md`、`session_log.md`、`TODO.md` 和派工規則檔，問你要鎖哪些資料夾；寫進 `.claude/` 的檔，Claude Code 會先問你要不要允許，這是正常的。
 
-**做完後你要檢查**：重開 `claude`，打 `/hooks`，看得到 workflow-kit 的 6 個 hook（`PreToolUse`、`PostToolUse`、`UserPromptExpansion`、`UserPromptSubmit`、`Stop`、`SessionStart`）。
+**做完後你要檢查**：重開 `claude`，打 `/hooks`，看得到 workflow-kit 的 7 個 hook（`PreToolUse`、`PostToolUse`、`PostCompact`、`UserPromptExpansion`、`UserPromptSubmit`、`Stop`、`SessionStart`）。
 
 ### 公司電腦擋外部套件來源時
 
@@ -63,7 +68,7 @@ Windows 上打 `python` 如果跳出 Microsoft Store，代表還沒裝 Python，
 
 公司電腦裝不了 plugin、或想把所有檔案都放在專案裡自己管，用這條。在**你的專案資料夾**開 Claude Code 或 Codex（打 `claude` 或 `codex`），把下面整段貼給它。它會先檢查環境、缺什麼先問你要不要裝，每一步都等你同意才做。已經用 plugin 裝過的專案不要再跑這條，install.py 偵測到會停下來。
 
-用 Codex 裝也可以，但裝好的東西只在 Claude Code 裡有作用：Codex 讀的是 `AGENTS.md`、`.agents/skills/`、`.codex/hooks.json`，不讀 `.claude/`。Codex 預設的沙箱不能連網、只能寫目前的資料夾，所以下載 template 到暫存資料夾時，它會先請你核准。
+用 Codex 裝也可以，但裝好的東西只在 Claude Code 裡有作用，因為 Codex 讀的是 `AGENTS.md`、`.agents/skills/`、`.codex/hooks.json`，不讀 `.claude/`。Codex 預設的沙箱不能連網、只能寫目前的資料夾，所以下載 template 到暫存資料夾時，它會先請你核准。
 
 ```text
 請幫我把 claude-workflow-template（https://github.com/wayhong0928/claude-workflow-template）裝進目前這個資料夾。每一步先說你要做什麼、要跑什麼指令，等我同意再做。不要自己改我專案裡原本的檔案，所有修改都交給它的 install.py（它會先備份）。
@@ -75,30 +80,30 @@ Windows 上打 `python` 如果跳出 Microsoft Store，代表還沒裝 Python，
    - Git：git --version。
 2. 沒有 Python 或 Claude Code 版本太舊：停下來，告訴我怎麼裝或更新（Python：Windows 用 winget install Python.Python.3.12，macOS 用 brew install python，Ubuntu／WSL 用 sudo apt install python3；Claude Code：看它是怎麼裝的，原生安裝用 claude update，WinGet 用 winget upgrade Anthropic.ClaudeCode，Homebrew 用 brew upgrade claude-code），問我要不要現在做。我說不要，就到此結束。
 3. 沒有 Git：問我要不要裝（Windows：winget install Git.Git；macOS：xcode-select --install；Ubuntu／WSL：sudo apt install git）。我說不要也沒關係，下一步改下載 ZIP。
-4. 把 template 下載到暫存資料夾，不要放進我的專案。有 Git 就用 git clone --depth 1；沒有就下載 https://github.com/wayhong0928/claude-workflow-template/archive/refs/heads/main.zip 再解壓縮。
+4. 把 template 的 v1.0.0 版下載到暫存資料夾，不要放進我的專案。有 Git 就用 git clone --branch v1.0.0 --depth 1 https://github.com/wayhong0928/claude-workflow-template.git；沒有就下載 https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.0.0.zip 再解壓縮。
 5. 問我要不要裝 session_log（每次開 session 自動接上次的進度，會在專案裡多出 session_log.md 和 TODO.md）。給我一句建議：這個資料夾不是 git repo（例如論文資料夾、Obsidian 筆記庫）就建議裝；是程式 repo 的話可以不裝。再問我有沒有不能讓你改的原始資料（PDF、問卷原始檔、已送審的文件），有的話列出資料夾或檔案。
 6. 先預演：python <暫存資料夾>/install.py <我的專案資料夾> --dry-run，加上 --session-log 或 --no-session-log；第 5 步列出的原始資料，每個路徑加一個 --protect <路徑>。把它列出的動作講給我聽；我同意後，拿掉 --dry-run 正式執行。指令裡的 python 換成第 1 步找到的那個。
-7. 在我的專案資料夾跑 python .claude/hooks/tests/run_tests.py（python 一樣換成第 1 步找到的那個），最後一行要是「31/31 通過」（前後數字一樣就是全過）。沒通過就把輸出貼給我，不要自己改 hook。
+7. 在我的專案資料夾跑 python .claude/hooks/tests/run_tests.py（python 一樣換成第 1 步找到的那個），最後一行是「N/N 通過」，前後兩個數字一樣就是全過。沒通過就把輸出貼給我，不要自己改 hook。
 8. 如果 install.py 說它新建了 CLAUDE.md：一次問我一題，把裡面的【】填完；我答不出來的那一行就刪掉。
-9. 刪掉暫存資料夾。回報：裝了什麼、哪些原本就有、備份放在哪、哪一步失敗或被我跳過。最後提醒我關掉 Claude Code，在專案資料夾重新打 claude，再打 /hooks 確認。
+9. 刪掉暫存資料夾。回報：裝的版本（用 Git 下載的話，附刪除前在暫存資料夾跑 git rev-parse --short HEAD 的結果）、裝了什麼、哪些原本就有、備份放在哪、哪一步失敗或被我跳過。最後提醒我關掉 Claude Code，在專案資料夾重新打 claude，再打 /hooks 確認。
 ```
 
-**AI 做完後你要檢查**：在專案資料夾重新打 `claude`，再打 `/hooks`，看得到 `PreToolUse`、`PostToolUse`、`UserPromptExpansion`、`UserPromptSubmit`、`Stop` 五類（裝了 session_log 會多一個 `SessionStart`）。
+**AI 做完後你要檢查**：在專案資料夾重新打 `claude`，再打 `/hooks`，看得到 `PreToolUse`、`PostToolUse`、`PostCompact`、`UserPromptExpansion`、`UserPromptSubmit`、`Stop` 六類（裝了 session_log 會多一個 `SessionStart`）。
 
 ### 不用 AI，自己跑 install.py
 
-下面的指令以 Windows 為例。macOS、Linux、WSL 把 `python` 換成 `python3`，路徑換成 `~/thesis/notes` 這種寫法。
+下面的指令假設專案資料夾是使用者資料夾底下的 `碩論筆記`（`~` 代表使用者資料夾，Windows、macOS、Linux 都通用），換成你自己的。路徑有空白的話，整段用引號包起來。macOS、Linux、WSL 把 `python` 換成 `python3`。
 
-1. 下載：按這頁上方綠色的 **Code** → **Download ZIP**，解壓縮到任何地方（不要解壓縮到你的專案裡）。會用 Git 的話，`git clone` 也可以。
+1. 下載 [v1.0.0 的 ZIP](https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.0.0.zip)，解壓縮到任何地方（不要解壓縮到你的專案裡）。會用 Git 的話，`git clone --branch v1.0.0 --depth 1` 也可以。
 2. 在解壓縮出來的資料夾打開終端機（Windows：在資料夾空白處按右鍵，選「在終端機中開啟」；macOS：開「終端機」，打 `cd `（後面有空格）再把資料夾拖進視窗、按 Enter；Linux、WSL：用 `cd` 切過去），先預演（路徑換成你的專案）：
 
    ```
-   python install.py "D:\碩論\筆記" --session-log --dry-run
+   python install.py ~/碩論筆記 --session-log --dry-run
    ```
 
    它會列出要新增幾個檔案、覆蓋哪些檔案、改哪些設定，不會真的動。不想裝 session_log 就把 `--session-log` 換成 `--no-session-log`；兩個都不寫，它會自己判斷（專案不在 git repo 裡就裝）。有不能改的原始資料，加上 `--protect pdf` 這類參數（見[保護原始資料](#保護原始資料)）。
 3. 確認沒問題，拿掉 `--dry-run` 再跑一次。
-4. 在終端機用 `cd "D:\碩論\筆記"` 切到你的專案資料夾，跑 `python .claude/hooks/tests/run_tests.py`，最後一行要是「31/31 通過」（前後數字一樣就是全過）。
+4. 在終端機用 `cd ~/碩論筆記` 切到你的專案資料夾，跑 `python .claude/hooks/tests/run_tests.py`，最後一行是「N/N 通過」，前後兩個數字一樣就是全過。
 5. 打開專案裡的 `CLAUDE.md`，把【】填完（install.py 有新建它的話）。
 6. 在專案資料夾打 `claude`，再打 `/hooks` 確認。
 
@@ -106,19 +111,25 @@ Windows 上打 `python` 如果跳出 Microsoft Store，代表還沒裝 Python，
 
 - 把 `template/.claude/` 底下的檔案複製到你專案的 `.claude/`。
 - 把 hook 設定合併進 `.claude/settings.json`。你原本的設定都保留，只加這幾項。有給 `--protect` 的話，也在同一個檔案的 `permissions.deny` 加上保護規則。
+- 有給 `--todo` 才會裝待辦功能（預設不裝，開場不會多出任何輸出）。裝了會把 `todo/scripts/` 的兩支腳本複製到 `.claude/todo/`，settings.json 加兩個 hook，開場列出待辦清單，改到 TODO 檔時檢查第一行格式。清單讀的是 Claude Code 設定資料夾裡的 `todo.config.json`（寫法見 [todo/README.md](todo/README.md)）；還沒有這個檔時，開場只會印一行提示說找不到設定檔，提示裡提到的 `/workflow-kit:setup` 是 plugin 的指令，這條路線請照 todo/README.md 手寫設定檔。
 - 專案沒有 `CLAUDE.md` 才新建一份。專案原本有 `AGENTS.md` 的話，新建的 CLAUDE.md 第一行是 `@AGENTS.md`，把它匯入；不這樣做，有了 CLAUDE.md 之後 Claude Code 就不會再自動讀 AGENTS.md。裝 session_log 時，在 CLAUDE.md 結尾加一段接力說明，前後有 `<!-- claude-workflow-template:start -->`、`<!-- claude-workflow-template:end -->` 標記。
 - 裝 session_log 時，專案沒有 `session_log.md`、`TODO.md` 才各建一份。
-- 專案在 git repo 裡時，`.gitignore` 加上 hook 執行時產生的本機狀態檔。
+- 專案在 git repo 裡時，`.gitignore` 加上 hook 執行時產生的本機狀態檔和安裝備份資料夾 `.claude/backup/`。
 
-覆蓋或修改前，舊檔會先備份到 `.claude/backup/workflow-template-<時間>/`。重複執行不會重複加設定，所以之後要更新，下載新版再跑一次就好。
+覆蓋或修改前（包括 `.gitignore`），舊檔會先備份到 `.claude/backup/workflow-template-<時間>/`。重複執行不會重複加設定，所以之後要更新，下載新版再跑一次就好。
 
 ### 移除
 
 ```
-python install.py "D:\碩論\筆記" --uninstall
+python install.py ~/碩論筆記 --uninstall
 ```
 
-會拿掉 settings.json 裡這個 template 的 hook、`.claude/` 裡它裝的檔案，以及 CLAUDE.md 裡標記的那一段。`permissions.deny` 的保護規則不會拿掉，原始資料繼續受保護，不需要的話自己從 settings.json 刪。`CLAUDE.md`、`session_log.md`、`TODO.md` 是你的內容，不會刪。settings.json 原本只有這些 hook 的話，會剩下一個內容是 `{}` 的空檔，可以刪掉；`.claude/backup/` 裡是安裝和移除前的備份，確定不要了也可以刪。
+加 `--dry-run` 可以先看它會做什麼。移除時會做這些事，刪或改之前都先備份到 `.claude/backup/`：
+
+- settings.json 拿掉這個 template 的 hook。拿掉後跟安裝前的備份內容一樣，就把那份原樣放回（排版不變）；安裝時才新建、拿掉後是空的，就刪掉。`permissions.deny` 的保護規則不會拿掉，原始資料繼續受保護，不需要的話自己從 settings.json 刪。
+- 刪掉 `.claude/` 裡它裝的檔案和 hook 的狀態檔，裝過 `--todo` 的話，`.claude/todo/` 和那兩個 hook 也一起拿掉（`todo.config.json` 在設定資料夾，不會動）。之前的備份裡如果有同路徑的舊檔（可能是你安裝前就有的同名檔），結尾會列出位置，要放回去自己複製。
+- CLAUDE.md 拿掉標記的那一段。`CLAUDE.md`、`session_log.md`、`TODO.md` 還是安裝時建的範本、你沒改過的話，直接刪掉；改過的是你的內容，不會刪。
+- `.gitignore` 拿掉 hook 狀態檔那幾行。`.claude/backup/` 那行會留著，免得備份被 `git add .` 收進去；備份資料夾確定不要了，連同那行一起刪掉。
 
 ## 裝好之後怎麼用
 
@@ -140,7 +151,7 @@ session_log 每筆的格式和寫法見 [template/.claude/session-log-kit/README
 flowchart TD
   A{"要派 subagent 嗎？"} -- "不用" --> Z["主對話自己做"]
   A -- "要" --> B["載入 dispatch-template（每個 session 一次）<br/>寫目標與動機、驗收條件、回報格式、模型"]
-  B -. "沒載入過，或 compact 後沒重載" .-> G["dispatch_gate.py 擋下"]
+  B -. "沒載入過，或對話壓縮後（含自動壓縮）沒重載" .-> G["dispatch_gate.py 擋下"]
   B --> C["subagent 做完回報"]
   C --> D{"依三級驗收"}
   D -- "通過" --> E["完成"]
@@ -155,7 +166,7 @@ flowchart TD
 PDF、問卷原始檔、已送審的文件這類不能改的東西，安裝時用 `--protect` 鎖住，資料夾或檔案都可以，給幾次都行：
 
 ```
-python install.py "D:\碩論\筆記" --session-log --protect pdf --protect "data\問卷原始檔.csv"
+python install.py ~/碩論筆記 --session-log --protect pdf --protect data/問卷原始檔.csv
 ```
 
 它會在 `.claude/settings.json` 加上這樣的設定：
@@ -178,12 +189,12 @@ Claude Code 每次你送出訊息都會存一個檢查點。檔案被改壞時�
 
 `/rewind` 救不回來的情況：
 
-- Claude 用指令改的檔案（`rm`、`mv`、`cp`、腳本寫檔），只有它用編輯工具改的才追蹤得到。
+- 只被指令改過的檔案（`rm`、`mv`、`cp`、`sed -i`、腳本寫檔）。Claude 先用編輯工具改過的檔案，之後指令對它的改動才會一起還原。
 - subagent 改的檔案，多數情況不會還原。
 - 你自己在 Claude Code 外面改的檔案。
 - 檢查點的檔案快照預設大約 30 天後清掉。
 
-所以長期的版本紀錄還是要另外留：會用 Git 的話，在專案資料夾 `git init`，每段工作做完請 Claude commit 一次；不用 Git 的話，至少在大改之前複製一份資料夾。
+所以長期的版本紀錄還是要另外留。會用 Git 的話，在專案資料夾 `git init`，每段工作做完請 Claude commit 一次；不用 Git 的話，至少在大改之前複製一份資料夾。
 
 ## 核對引用與主張
 
@@ -214,19 +225,21 @@ todo/                      /todo 側欄（另一個 plugin，選用）
 install.py                 備用裝法：安裝與移除
 template/                  兩種裝法共用的檔案
   .claude/
-    hooks/                 四支 hook、一支共用模組、測試
+    hooks/                 五支 hook、兩支共用模組、測試
     skills/dispatch-template/  派工 prompt 模板、模型選型表
     agents/verifier.md     驗收用的 subagent
     rules/dispatch-and-verify.md  什麼時候派 subagent、怎麼驗收
     session-log-kit/       session_log 的注入、寫入、歸檔腳本
   hooks-core.json          install.py 合併進 settings.json 的 hook 設定
   hooks-session-log.json   同上，session_log 用
+  hooks-todo.json          同上，--todo 用
   CLAUDE.md.template       新建 CLAUDE.md 時用
   session_log.md.template、TODO.md.template
 docs/
   how-it-works.md          一個 session 照什麼順序發生、要不要裝 session_log、怎麼改成自己的版本
+  conventions.md           檔案命名、有效期、out 資料夾、結案搬移的慣例
   vs-superpowers.md        跟 Superpowers 的差異
-tests/test_install.py      install.py 的測試
+tests/test_install.py      install.py 的測試（在 repo 資料夾跑 python tests/test_install.py）
 index.html                 介紹頁
 README.md、README.en.md    說明文件（繁體中文、英文）
 ```
@@ -236,13 +249,17 @@ README.md、README.en.md    說明文件（繁體中文、英文）
 ## 已知限制
 
 - `rules/` 和 `dispatch-template` 是寫給 Claude 看的規則，它不一定每次都照做；會強制的只有 hook 那幾項。
-- hook 全部 fail-open：出錯時一律放行，不會卡住你，但壞掉時也不會有提示。改了 hook 請跑測試。
-- `ctrl_char_stop.py` 只檢查得到 transcript 裡有完整路徑的檔案：指令裡用變數組出來的路徑會漏掉，macOS、Linux 上含空白的路徑要有引號包住才抓得到。subagent 寫的檔案記在另一份 transcript，也不在檢查範圍。同一回合最多擋 1 次。
+- hook 全部 fail-open，出錯時一律放行，不會卡住你，但壞掉時也不會有提示。改了 hook 請跑測試。
+- `ctrl_char_stop.py` 只檢查得到 transcript 裡有完整路徑的檔案。指令裡用變數組出來的路徑會漏掉，macOS、Linux 上含空白的路徑要有引號包住才抓得到。subagent 寫的檔案記在另一份 transcript，也不在檢查範圍。同一回合最多擋 1 次。
 - 連內建的 `Explore`、`Plan` subagent 也要先載入 `dispatch-template` 才能派（只有 `fork` 免檢），所以進 plan mode 後第一次派工可能會被擋一次，載入模板後就會放行。
-- hook 用的 Python 指令名是照安裝當下的環境設的（Windows 常是 `python`，macOS、Linux 常是 `python3`）。plugin 版記在 `--config python=`，可以用 `/plugin configure workflow-kit@workflow-kit` 改；install.py 版寫在 `.claude/settings.json`。同一個專案資料夾同時從 Windows 和 WSL 開，或用雲端硬碟在 Windows 和 Mac 之間同步，另一邊的 hook 會全部失敗，派工檢查也跟著失效。
-- 實機測試範圍：Claude Code 實機只在 Windows 原生跑過；hook 與安裝程式的測試在 Windows 和 WSL2（Ubuntu）都跑過；macOS 還沒測。
+- `fork` 免檢，也不吃 `model` 參數。fork 帶著主對話的完整 context，用的是主對話的模型。fork mode 預設開啟（終端機互動模式從 2.1.232 起），Claude 可以自己決定開 fork，所以「派工前寫清楚」「指定模型省額度」這兩條在 fork 上不成立。規則檔要求要指定模型的派工（haiku 批次、opus 第二意見、verifier）不用 fork（官方 [sub-agents](https://code.claude.com/docs/en/sub-agents#how-forks-differ-from-other-subagents)）。
+- 對話被壓縮後，派工前要重新載入 `dispatch-template`。手動 `/compact`、對話太長的自動壓縮、閒置自動壓縮都算。閒置自動壓縮從 2.1.299 起預設開啟，對話超過 20 萬 token 又離開約 54 分鐘就會發生，所以離開座位回來第一次派工可能會被擋一次，載入模板後就放行。壓縮後 skill 只留開頭 5,000 tokens，重新載入才拿得回完整內容（官方 [skills](https://code.claude.com/docs/en/skills#skill-content-lifecycle)）。
+- hook 腳本和 `.claude/settings.json` 每回合都會自動執行，安裝時沒有替它們加 deny 規則。Claude Code 本來就把 `.claude/` 當成保護路徑，手動模式和 acceptEdits 模式下寫入前一定問你，auto mode 下交給分類模型審查，settings 裡的 allow 規則也放行不了（官方 [permission-modes](https://code.claude.com/docs/en/permission-modes#protected-paths)）。再加 deny，連你自己請 Claude 改設定、setup 寫保護規則都會被擋。Claude 要改 `.claude/` 底下的檔案時，看清楚它改什麼再同意。
+- 額度：規則預設會派 opus 做第二意見和升級重派，verifier 固定用 `effort: high`，`/goal` 每回合還要另一個模型判斷條件，這幾項都比較吃額度。額度少的話，照規則檔「額度有限時」一節降級；派出去報模型不可用或額度不足時怎麼辦，也寫在規則檔。
+- hook 用的 Python 指令名是照安裝當下的環境設的（Windows 常是 `python`，macOS、Linux 常是 `python3`）。plugin 版記在 `--config python=`，可以用 `/plugin configure workflow-kit@workflow-kit` 改；install.py 版寫在 `.claude/settings.json`。同一個資料夾在兩種系統開的情況，見[安裝前](#安裝前確認環境)。
+- 實機測試範圍：Claude Code 實機只在 Windows 原生跑過；hook 與安裝程式的測試在 Windows 和 WSL2（Ubuntu）都跑過；macOS 沒測過。
 - `--protect` 的保護規則擋不到腳本自己開檔寫入（見[保護原始資料](#保護原始資料)）；路徑裡有 `*`、`?`、`[`、`]` 的話，install.py 不會幫你寫，請手動加。
-- 只支援 Claude Code。Codex 可以幫你執行安裝，但它不讀 `.claude/`：規則要放 `AGENTS.md`，skill 要放 `.agents/skills/`，hook 要放 `.codex/hooks.json`。派工檢查靠 Claude Code 的 Skill 工具事件，控制字元檢查要讀 Claude Code 的 transcript（Codex 官方文件寫明它的 transcript 格式不是穩定介面），這兩支 hook 不能直接搬過去用。
+- 只支援 Claude Code。Codex 可以幫你執行安裝，但它不讀 `.claude/`。規則要放 `AGENTS.md`，skill 要放 `.agents/skills/`，hook 要放 `.codex/hooks.json`。派工檢查靠 Claude Code 的 Skill 工具事件，控制字元檢查要讀 Claude Code 的 transcript（Codex 官方文件寫明它的 transcript 格式不是穩定介面），這兩支 hook 不能直接搬過去用。
 
 ## 回報問題
 

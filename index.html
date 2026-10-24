@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Claude Code 工作流 template</title>
 <meta name="description" content="給研究生用的 Claude Code 專案設定：開場自動接上次進度、派 subagent 前先套派工模板、產出交給另一個 agent 驗收，另有幾支 hook 擋常見的錯。">
+<link rel="stylesheet" href="assets/diagram.css">
 <style>
 :root {
   --bg: #f6f7f9;
@@ -15,6 +16,16 @@
   --accent: #2f5d8a;
   --accent-soft: #e6eef6;
   --code-bg: #eef1f4;
+  /* 以下給 assets/diagram.css 用。上游用的變數名，在這裡對應到本頁的 token */
+  --panel: var(--surface);
+  --ink: var(--text);
+  --ink-soft: var(--muted);
+  --rule: #b9c2cc;
+  --ink-faint: #6b7480;
+  --ok-bg: #e7f2ea;
+  --ok-rule: #4f8a5b;
+  --sans: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+  --mono: ui-monospace, Consolas, Menlo, monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -26,6 +37,10 @@
     --accent: #8fb6dd;
     --accent-soft: #22303d;
     --code-bg: #252c35;
+    --rule: #4a5663;
+    --ink-faint: #8b96a3;
+    --ok-bg: #1f2f25;
+    --ok-rule: #6aa97a;
   }
 }
 :root[data-theme="dark"] {
@@ -37,19 +52,24 @@
   --accent: #8fb6dd;
   --accent-soft: #22303d;
   --code-bg: #252c35;
+  --rule: #4a5663;
+  --ink-faint: #8b96a3;
+  --ok-bg: #1f2f25;
+  --ok-rule: #6aa97a;
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", system-ui, sans-serif;
+  font-family: var(--sans);
   font-size: 16px;
   line-height: 1.75;
 }
 main { max-width: 860px; margin: 0 auto; padding: 40px 16px 64px; }
 h1 { font-size: 1.9rem; line-height: 1.3; margin: 0 0 12px; }
 h2 { font-size: 1.3rem; margin: 48px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 1.1rem; margin: 32px 0 6px; }
 p { margin: 0 0 12px; }
 a { color: var(--accent); }
 code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 0.92em; overflow-wrap: anywhere; }
@@ -65,46 +85,14 @@ pre.prompt { background: var(--code-bg); padding: 12px 14px; border-radius: 6px;
   background: var(--accent-soft); border-left: 4px solid var(--accent);
   padding: 12px 16px; border-radius: 4px; margin: 16px 0;
 }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
-.card h3 { margin: 0 0 4px; font-size: 1.05rem; }
-.card .folder { color: var(--muted); font-size: 0.9rem; }
-.card p { margin: 6px 0 0; font-size: 0.95rem; }
-ol.flow { list-style: none; counter-reset: step; padding: 0; margin: 0; }
-ol.flow li {
-  counter-increment: step; position: relative;
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  padding: 12px 16px 12px 56px; margin-bottom: 10px;
-}
-ol.flow li::before {
-  content: counter(step); position: absolute; left: 16px; top: 12px;
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--accent); color: var(--bg);
-  font-weight: 700; font-size: 0.9rem; text-align: center; line-height: 26px;
-}
-ol.flow strong { display: block; }
-.tag { display: inline-block; font-size: 0.8rem; padding: 0 8px; border-radius: 10px; margin-left: 6px; vertical-align: 2px; border: 1px solid var(--accent); color: var(--accent); font-weight: 600; }
-.tag.self { border-color: var(--muted); color: var(--muted); }
 .note { color: var(--muted); font-size: 0.92rem; }
-table { width: 100%; border-collapse: collapse; background: var(--surface); font-size: 0.95rem; }
-th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
-th { background: var(--accent-soft); }
-td:first-child { white-space: nowrap; }
-.table-wrap { overflow-x: auto; }
-ul { padding-left: 1.3em; }
+ul, ol { padding-left: 1.3em; }
 li { margin-bottom: 6px; }
+figure.diagram { margin: 16px 0 24px; }
+.diagram figcaption { color: var(--muted); }
 footer { margin-top: 56px; color: var(--muted); font-size: 0.9rem; }
-.chain { margin: 16px 0 0; }
-.chain .node {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 4px 16px; justify-content: space-between;
-}
-.chain .main { flex: 1 1 320px; }
-.chain .side { flex: 1 1 200px; color: var(--muted); font-size: 0.92rem; border-left: 3px solid var(--line); padding-left: 10px; }
-.chain .down { color: var(--accent); font-size: 0.9rem; font-weight: 600; padding: 4px 0 4px 22px; }
 @media (max-width: 520px) {
   h1 { font-size: 1.55rem; }
-  ol.flow li { padding-left: 50px; }
 }
 .themebtn {
   position: absolute; top: 12px; right: 12px; z-index: 10;
@@ -137,107 +125,573 @@ header h1 { padding-right: 44px; }
   </div>
 </header>
 
-<section>
-  <h2>它解決什麼問題</h2>
-  <p>一篇論文要寫好幾個月，會跨很多個 session。Claude Code 的 auto memory 由 Claude 自己決定要記什麼，不保證記下上次做到哪；<code>--continue</code> 只能接回上一段對話。派 subagent 做事時，常常沒交代清楚要什麼、做完怎麼算完成；做完了，也沒有人回頭核對。這個 template 把這幾件事分成兩類：</p>
-  <div class="principle">忘了也要發生的事交給 hook；需要判斷的事寫成規則，讓 Claude 照做。</div>
+<section id="what">
+  <h2>這是什麼、給誰</h2>
+  <p>一篇論文要寫好幾個月，會跨很多個 session。Claude Code 的 auto memory 由 Claude 自己決定要記什麼，不保證記下上次做到哪；<code>--continue</code> 只能接回上一段對話。派 subagent 做事時，常常沒交代清楚要什麼、做完怎麼算完成；做完了，也沒有人回頭核對。這個 template 以 plugin 的形式（名稱 workflow-kit）把這幾件事分成兩類來處理。</p>
+  <div class="principle">忘了也要發生的事交給 hook，需要判斷的事寫成規則，讓 Claude 照做。</div>
   <p>hook 是 Claude Code 在特定時間點自動執行的腳本，可以注入內容，也可以擋下動作。規則寫在 <code>.claude/rules/</code> 和 skill 裡，靠 Claude 自律，不一定每次都照做。</p>
+  <p>適合用 Claude Code（終端機版）、以寫作和研究為主、一個專案會跨很多 session 的人，例如論文、文獻筆記、報告。純寫程式的話，<a href="https://github.com/obra/superpowers">Superpowers</a> 這類套件比較合適，差異見<a href="https://github.com/wayhong0928/claude-workflow-template/blob/main/docs/vs-superpowers.md">這份比較</a>。Windows 原生在實機上跑過，WSL2（Ubuntu）跑過 hook 與安裝程式的測試，macOS 沒測過。完整的適用條件見 <a href="https://github.com/wayhong0928/claude-workflow-template#適合誰">README 的適合誰</a>。</p>
+  <p class="note">Claude Code 的設定分哪幾層、CLAUDE.md 放哪裡，是跟這套 workflow 無關的通用原理，見 ai-agent-notes 的<a href="https://wayhong0928.github.io/ai-agent-notes/pages/official-config.html">Claude Code 設定總覽</a>。</p>
 </section>
 
-<section>
-  <h2>四個組成</h2>
-  <div class="cards">
-    <div class="card">
-      <h3>接力</h3>
-      <div class="folder"><code>.claude/session-log-kit/</code></div>
-      <p>選裝。session_log 記做了什麼，TODO 記還沒做什麼。開場由 hook 注入最新一筆全文和前兩筆的下一步。專案不在 git repo 裡時，安裝程式預設會裝。</p>
-    </div>
-    <div class="card">
-      <h3>派工</h3>
-      <div class="folder"><code>.claude/skills/dispatch-template/</code></div>
-      <p>先問值不值得派，派就用模板寫清楚目標、驗收條件和回報格式，並指定模型。沒載入模板就派工，hook 會擋下。</p>
-    </div>
-    <div class="card">
-      <h3>驗收</h3>
-      <div class="folder"><code>.claude/agents/verifier.md</code></div>
-      <p>做的人不驗自己的活。依產出風險分三級，最高一級交給只拿到驗收條件、沒看過推理過程的 verifier。</p>
-    </div>
-    <div class="card">
-      <h3>護欄 hook</h3>
-      <div class="folder"><code>.claude/hooks/</code></div>
-      <p>一再犯的錯改成機制：寫出控制字元會被擋，context 過長會被提醒。hook 自己出錯時一律放行，不會卡住工作。安裝時用 <code>--protect</code> 指定的原始資料，由 Claude Code 的權限規則擋下編輯工具與 <code>&gt;</code> 重導向的修改（腳本自己開檔寫入擋不到）。</p>
-    </div>
-  </div>
-</section>
-
-<section>
-  <h2>一個 session 從開場到收尾</h2>
-  <ol class="flow">
-    <li><strong>開場<span class="tag">機制</span></strong>有裝 session_log 的話，SessionStart hook 注入 session_log 最新一筆全文，加前兩筆的標題與下一步。Claude 先用一兩句話報告上次進度。</li>
-    <li><strong>決定要不要派 subagent<span class="tag self">自律</span></strong>主對話預設自己做。只有要隔離大量內容、有可獨立完成的工作包、或需要獨立驗收時才派。</li>
-    <li><strong>派工前載模板<span class="tag">機制</span></strong>這個 session 還沒載入 <code>dispatch-template</code> 就派工，<code>dispatch_gate.py</code> 會擋下並說明原因。</li>
-    <li><strong>不過就續問或升級<span class="tag self">自律</span></strong>第一次不過先續問原 agent；再不過才換更強的模型，並附上兩次的失敗紀錄。</li>
-    <li><strong>宣告完成前驗收<span class="tag self">自律</span></strong>依下面的三級表決定怎麼驗。</li>
-    <li><strong>context 過長時提醒<span class="tag">機制</span></strong>主對話超過 15 萬 token，<code>context_guard.py</code> 提醒你在段落點補 log，再下 <code>/clear</code>。</li>
-    <li><strong>回合結束掃控制字元<span class="tag">機制</span></strong>本回合寫過的 .md、.json、.py 混進控制字元，<code>ctrl_char_stop.py</code> 會擋下。</li>
-    <li><strong>收尾<span class="tag self">自律</span></strong>有裝 session_log 的話，用 <code>add_session_log.py</code> 在頂部補一筆（腳本檢查格式），刪掉做完的 TODO。</li>
-  </ol>
-</section>
-
-<section>
-  <h2>派工到驗收</h2>
-  <div class="chain" role="list" aria-label="派工到驗收的流程">
-    <div class="node" role="listitem">
-      <div class="main"><strong>要派 subagent 嗎？</strong><br>要隔離大量內容、有可獨立完成的工作包、或需要獨立驗收，至少一個成立才派。</div>
-      <div class="side">都不成立：主對話自己做。</div>
-    </div>
-    <div class="down" aria-hidden="true">↓ 要派</div>
-    <div class="node" role="listitem">
-      <div class="main"><strong>載入 <code>dispatch-template</code></strong>（每個 session 一次）<br>寫清楚目標與動機、驗收條件、回報格式，並指定模型。</div>
-      <div class="side"><span class="tag" style="margin-left:0">機制</span> 這個 session 沒載入過，或 compact 後沒重載就派，<code>dispatch_gate.py</code> 擋下。</div>
-    </div>
-    <div class="down" aria-hidden="true">↓ subagent 做完回報</div>
-    <div class="node" role="listitem">
-      <div class="main"><strong>依三級驗收</strong><br>0 級不派 verifier，1 級跑測試貼輸出，2 級派 verifier。</div>
-      <div class="side">通過：完成。</div>
-    </div>
-    <div class="down" aria-hidden="true">↓ 不過</div>
-    <div class="node" role="listitem">
-      <div class="main"><strong>方向對、細節錯：續問原 agent 一次</strong></div>
-      <div class="side">方向就錯了，或續問還是不過：換更強的模型重派，附上失敗紀錄。最多升到 opus 一輪，再不過就停下來交給使用者決定。</div>
-    </div>
-  </div>
-</section>
-
-<section>
-  <h2>驗收分三級</h2>
-  <div class="table-wrap">
-  <table>
-    <thead><tr><th>級</th><th>產出</th><th>怎麼驗</th></tr></thead>
-    <tbody>
-      <tr><td>0</td><td>照抄使用者提供的內容、session_log、TODO、搬檔、單行修改</td><td>不派 verifier，回報寫明理由</td></tr>
-      <tr><td>1</td><td>批次修改、數字加總、程式、腳本、hook</td><td>跑腳本或測試，把輸出貼出來當證據</td></tr>
-      <tr><td>2</td><td>論文正文與文獻筆記、公開網站內容、規則檔、報告的結論與出處</td><td>派 fresh-context 的 verifier，只給驗收條件與檔案；高風險判斷再加一路 opus 第二意見</td></tr>
-    </tbody>
-  </table>
-  </div>
-  <p class="note" style="margin-top:12px">完整規則在 <a href="https://github.com/wayhong0928/claude-workflow-template/blob/main/template/.claude/rules/dispatch-and-verify.md"><code>.claude/rules/dispatch-and-verify.md</code></a>。</p>
-</section>
-
-<section>
-  <h2>開始使用</h2>
+<section id="install">
+  <h2>怎麼裝</h2>
+  <p>plugin 是主要的裝法。公司電腦擋外部套件來源時，才用 install.py 備用裝法。兩種裝法與更新路徑的對照圖在下一節。</p>
   <ol>
-    <li><strong>確認環境</strong>：Claude Code 2.1.292 以上、Python 3.8 以上，不需要 PowerShell，Git 也不是必要的。檢查方法見 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">README 的環境表</a>。</li>
-    <li><strong>讓 AI 幫你裝成 plugin</strong>：在你的專案資料夾開 Claude Code，貼上下面這段。每一步它都會先說要跑什麼，等你同意才做。
+    <li>先確認環境。Claude Code 2.1.292 以上、Python 3.8 以上，不需要 PowerShell，Git 也不是必要的。檢查方法見 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">README 的環境表</a>。</li>
+    <li>讓 AI 幫你裝成 plugin。在你的專案資料夾開 Claude Code，貼上下面這段。每一步它都會先說要跑什麼，等你同意才做。
 <pre class="prompt">請幫我在目前這個資料夾裝 workflow-kit（https://github.com/wayhong0928/claude-workflow-template）。每一步先說要跑什麼指令，等我同意再做。
 1. 檢查 claude --version 要 2.1.292 以上；Python 依序試 python、python3、py（py 只在 Windows 試），要 3.8 以上，Windows 上跳出 Microsoft Store 或印出 "Python was not found" 算沒有。缺哪個就停下來告訴我怎麼裝。
 2. 跑 claude plugin marketplace add wayhong0928/claude-workflow-template
 3. 跑 claude plugin install workflow-kit@workflow-kit --scope project --config python=&lt;第 1 步找到的 Python 指令&gt;
 4. 請我關掉 Claude Code、在同一個資料夾重開，再打 /workflow-kit:setup，照它的問題一題一題回答。</pre>
     setup 寫進 <code>.claude/</code> 的檔，Claude Code 會先問你要不要允許，這是正常的。</li>
-    <li><strong>公司電腦擋外部套件來源時</strong>：管理員可以限制只能從核准的來源裝 plugin，這時上面第 2 步會失敗。改用 <a href="https://github.com/wayhong0928/claude-workflow-template#備用用-installpy-裝">README 的備用裝法</a>，用 <code>install.py</code> 把檔案複製進你的專案，原本的設定會保留，改動前先備份，不要了可以用 <code>--uninstall</code> 移除。</li>
+    <li>裝完後重開 <code>claude</code>，打 <code>/hooks</code>，看得到 workflow-kit 的 7 個 hook（<code>PreToolUse</code>、<code>PostToolUse</code>、<code>PostCompact</code>、<code>UserPromptExpansion</code>、<code>UserPromptSubmit</code>、<code>Stop</code>、<code>SessionStart</code>）才算裝好。</li>
+    <li>公司電腦擋外部套件來源時，管理員可以限制只能從核准的來源裝 plugin，上面第 2 步會失敗。改用 <a href="https://github.com/wayhong0928/claude-workflow-template#備用用-installpy-裝">README 的備用裝法</a>，用 <code>install.py</code> 把檔案複製進你的專案，原本的設定會保留，改動前先備份，不要了可以用 <code>--uninstall</code> 移除。</li>
   </ol>
-  <p>適合以寫作、研究為主、一個專案會跨很多 session 的人。Windows 原生在實機上跑過；WSL2（Ubuntu）跑過 hook 與安裝程式的測試；macOS 還沒測。用 WSL 的話，Claude Code 和安裝程式都在 WSL 裡跑。</p>
+</section>
+
+<section id="update">
+  <h2>怎麼更新</h2>
+  <p>兩種裝法各有自己的更新路徑，不要混用。已經用 plugin 裝過的專案，install.py 偵測到會停下來。</p>
+<figure class="diagram">
+<svg class="dg-wide" viewBox="0 0 700 312" role="img" aria-labelledby="fig7w-t">
+<title id="fig7w-t">兩種裝法與各自的更新路徑。plugin 是建議的做法，裝與更新都靠 claude plugin 指令，裝完重開 Claude Code。install.py 是備用，把檔案複製進專案，更新時下載新版再跑一次。</title>
+<defs><marker id="fig7w-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="335" height="96" rx="10"/>
+<text class="dg-t" x="24" y="34">裝</text>
+<text class="dg-l" x="331" y="34" text-anchor="end">plugin，建議</text>
+<text class="dg-s" x="24" y="56">1 加入 marketplace。2 用 --scope project 安裝，</text>
+<text class="dg-s" x="24" y="74">並用 --config 指定 Python 指令。3 重開 Claude</text>
+<text class="dg-s" x="24" y="92">Code，打 /workflow-kit:setup 回答問題。</text>
+<rect class="dg-box" x="355" y="10" width="335" height="96" rx="10"/>
+<text class="dg-t" x="369" y="34">更新</text>
+<text class="dg-l" x="676" y="34" text-anchor="end">plugin</text>
+<text class="dg-s" x="369" y="56">1 更新 marketplace 的清單。2 更新 workflow-kit。</text>
+<text class="dg-s" x="369" y="74">3 重開 Claude Code。setup 複製進專案的規則檔不</text>
+<text class="dg-s" x="369" y="92">會跟著換。</text>
+<rect class="dg-box" x="10" y="126" width="335" height="96" rx="10"/>
+<text class="dg-t" x="24" y="150">裝</text>
+<text class="dg-l" x="331" y="150" text-anchor="end">install.py，備用</text>
+<text class="dg-s" x="24" y="172">1 下載 template 到專案以外的地方。2 先加</text>
+<text class="dg-s" x="24" y="190">--dry-run 預演。3 拿掉 --dry-run 正式跑。公司</text>
+<text class="dg-s" x="24" y="208">電腦擋外部套件來源時用這條。</text>
+<rect class="dg-box" x="355" y="126" width="335" height="96" rx="10"/>
+<text class="dg-t" x="369" y="150">更新</text>
+<text class="dg-l" x="676" y="150" text-anchor="end">install.py</text>
+<text class="dg-s" x="369" y="172">下載新版，照同樣的步驟再跑一次 install.py。它會</text>
+<text class="dg-s" x="369" y="190">先備份再覆蓋。</text>
+<path class="dg-line" d="M346,40 L354,40" marker-end="url(#fig7w-h)"/>
+<path class="dg-line" d="M346,156 L354,156" marker-end="url(#fig7w-h)"/>
+<rect class="dg-note" x="10" y="238" width="680" height="56" rx="10"/>
+<text class="dg-s" x="24" y="262">plugin 的自動更新預設關閉，要自己在 /plugin 的 Marketplaces 分頁開。已用 plugin 裝過的專案，</text>
+<text class="dg-s" x="24" y="280">install.py 偵測到會停下來，兩條不要混用。</text>
+</svg>
+<svg class="dg-narrow" viewBox="0 0 350 546" role="img" aria-labelledby="fig7n-t">
+<title id="fig7n-t">兩種裝法與各自的更新路徑。plugin 是建議的做法，裝與更新都靠 claude plugin 指令，裝完重開 Claude Code。install.py 是備用，把檔案複製進專案，更新時下載新版再跑一次。</title>
+<defs><marker id="fig7n-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="330" height="96" rx="10"/>
+<text class="dg-t" x="24" y="34">裝</text>
+<text class="dg-l" x="326" y="34" text-anchor="end">plugin，建議</text>
+<text class="dg-s" x="24" y="56">1 加入 marketplace。2 用 --scope project 安裝，</text>
+<text class="dg-s" x="24" y="74">並用 --config 指定 Python 指令。3 重開 Claude</text>
+<text class="dg-s" x="24" y="92">Code，打 /workflow-kit:setup 回答問題。</text>
+<path class="dg-line" d="M50,106 L50,126" marker-end="url(#fig7n-h)"/>
+<rect class="dg-box" x="10" y="128" width="330" height="96" rx="10"/>
+<text class="dg-t" x="24" y="152">更新</text>
+<text class="dg-l" x="326" y="152" text-anchor="end">plugin</text>
+<text class="dg-s" x="24" y="174">1 更新 marketplace 的清單。2 更新</text>
+<text class="dg-s" x="24" y="192">workflow-kit。3 重開 Claude Code。setup 複製</text>
+<text class="dg-s" x="24" y="210">進專案的規則檔不會跟著換。</text>
+<rect class="dg-box" x="10" y="244" width="330" height="96" rx="10"/>
+<text class="dg-t" x="24" y="268">裝</text>
+<text class="dg-l" x="326" y="268" text-anchor="end">install.py，備用</text>
+<text class="dg-s" x="24" y="290">1 下載 template 到專案以外的地方。2 先加</text>
+<text class="dg-s" x="24" y="308">--dry-run 預演。3 拿掉 --dry-run 正式跑。公司</text>
+<text class="dg-s" x="24" y="326">電腦擋外部套件來源時用這條。</text>
+<path class="dg-line" d="M50,340 L50,360" marker-end="url(#fig7n-h)"/>
+<rect class="dg-box" x="10" y="362" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="386">更新</text>
+<text class="dg-l" x="326" y="386" text-anchor="end">install.py</text>
+<text class="dg-s" x="24" y="408">下載新版，照同樣的步驟再跑一次 install.py。它</text>
+<text class="dg-s" x="24" y="426">會先備份再覆蓋。</text>
+<rect class="dg-note" x="10" y="454" width="330" height="74" rx="10"/>
+<text class="dg-s" x="24" y="478">plugin 的自動更新預設關閉，要自己在 /plugin 的</text>
+<text class="dg-s" x="24" y="496">Marketplaces 分頁開。已用 plugin 裝過的專案，</text>
+<text class="dg-s" x="24" y="514">install.py 偵測到會停下來，兩條不要混用。</text>
+</svg>
+<figcaption>plugin 是主要的裝法，裝與更新都靠 claude plugin 指令。install.py 是備用，把檔案複製進專案，更新時下載新版再跑一次。</figcaption>
+</figure>
+  <ul>
+    <li>plugin：跑 <code>claude plugin marketplace update workflow-kit</code>，再跑 <code>claude plugin update workflow-kit@workflow-kit</code>，重開 Claude Code。hook、skill、verifier 會換成新版；setup 複製進專案的 <code>.claude/rules/dispatch-and-verify.md</code> 不會跟著換，想換就請 Claude 比對它和新版的差異再決定。</li>
+    <li>備用裝法：下載新版，照 README 備用裝法的步驟再跑一次 install.py，它會先備份再覆蓋。</li>
+    <li>自動更新：plugin 的自動更新在第三方 marketplace 預設關閉。想開的話，在 Claude Code 打 <code>/plugin</code>，到 Marketplaces 分頁選 workflow-kit，再選 Enable auto-update。開了以後，Claude Code 在 session 開始後於背景更新，正在跑的 session 維持舊版，下一個 session 才載入新版。出處是官方文件的 <a href="https://code.claude.com/docs/en/plugins/install#keep-plugins-updated">Keep plugins updated</a>。</li>
+  </ul>
+  <p class="note">更新指令的完整寫法在 <a href="https://github.com/wayhong0928/claude-workflow-template#更新">README 的更新一節</a>。</p>
+</section>
+
+<section id="mechanisms">
+  <h2>它加了哪些機制</h2>
+  <p>每張圖裡，藍底的是 hook 自動做或自動擋，忘了也會發生，白底的寫在規則裡，靠 Claude 照做。每個機制的細節見<a href="https://wayhong0928.github.io/claude-workflow-template/docs/how-it-works.html">運作方式</a>。</p>
+
+  <h3>一個 session 從開場到收尾</h3>
+<figure class="diagram">
+<svg class="dg-wide" viewBox="0 0 700 420" role="img" aria-labelledby="fig1w-t">
+<title id="fig1w-t">一個 session 從開場到收尾的六個階段。開場注入、派工前載模板、回合結束掃控制字元由 hook 做，決定要不要派、宣告完成前驗收、收尾寫 log 靠 Claude 照規則做。</title>
+<defs><marker id="fig1w-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-key" x="10" y="10" width="214" height="132" rx="10"/>
+<text class="dg-t" x="24" y="34">1 開場</text>
+<text class="dg-l" x="210" y="34" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="56">SessionStart hook 注入</text>
+<text class="dg-s" x="24" y="74">session_log 最新 1 筆全文，</text>
+<text class="dg-s" x="24" y="92">前 2 筆只放標題與下一步。</text>
+<text class="dg-s" x="24" y="110">Claude 照規則用 1 到 2 句報告</text>
+<text class="dg-s" x="24" y="128">上次進度。</text>
+<rect class="dg-box" x="243" y="10" width="214" height="132" rx="10"/>
+<text class="dg-t" x="257" y="34">2 要不要派</text>
+<text class="dg-l" x="443" y="34" text-anchor="end">自律</text>
+<text class="dg-s" x="257" y="56">預設自己做。要隔離大量內容、</text>
+<text class="dg-s" x="257" y="74">有可獨立完成的工作包、或需要</text>
+<text class="dg-s" x="257" y="92">獨立驗收，才派。</text>
+<rect class="dg-key" x="476" y="10" width="214" height="132" rx="10"/>
+<text class="dg-t" x="490" y="34">3 派工前</text>
+<text class="dg-l" x="676" y="34" text-anchor="end">機制</text>
+<text class="dg-s" x="490" y="56">沒載入 dispatch-template 就</text>
+<text class="dg-s" x="490" y="74">派工，dispatch_gate.py 會</text>
+<text class="dg-s" x="490" y="92">擋下並說明原因。</text>
+<rect class="dg-box" x="10" y="186" width="214" height="114" rx="10"/>
+<text class="dg-t" x="24" y="210">4 宣告完成前</text>
+<text class="dg-l" x="210" y="210" text-anchor="end">自律</text>
+<text class="dg-s" x="24" y="232">依三級決定怎麼驗。不派</text>
+<text class="dg-s" x="24" y="250">verifier、跑測試貼輸出、或派</text>
+<text class="dg-s" x="24" y="268">verifier。</text>
+<rect class="dg-key" x="243" y="186" width="214" height="114" rx="10"/>
+<text class="dg-t" x="257" y="210">5 回合結束</text>
+<text class="dg-l" x="443" y="210" text-anchor="end">機制</text>
+<text class="dg-s" x="257" y="232">本回合寫過的 .md、.json、</text>
+<text class="dg-s" x="257" y="250">.py 混進控制字元，</text>
+<text class="dg-s" x="257" y="268">ctrl_char_stop.py 會擋下。</text>
+<rect class="dg-box" x="476" y="186" width="214" height="114" rx="10"/>
+<text class="dg-t" x="490" y="210">6 收尾</text>
+<text class="dg-l" x="676" y="210" text-anchor="end">自律加腳本檢查</text>
+<text class="dg-s" x="490" y="232">用 add_session_log.py 在</text>
+<text class="dg-s" x="490" y="250">session_log 頂部補一筆，腳</text>
+<text class="dg-s" x="490" y="268">本檢查格式。做完的 TODO 整條</text>
+<text class="dg-s" x="490" y="286">刪掉。</text>
+<path class="dg-line" d="M225,40 L242,40" marker-end="url(#fig1w-h)"/>
+<path class="dg-line" d="M225,216 L242,216" marker-end="url(#fig1w-h)"/>
+<path class="dg-line" d="M458,40 L475,40" marker-end="url(#fig1w-h)"/>
+<path class="dg-line" d="M458,216 L475,216" marker-end="url(#fig1w-h)"/>
+<path class="dg-line" d="M583.0,142 L583.0,164 L117.0,164 L117.0,185" marker-end="url(#fig1w-h)"/>
+<rect class="dg-note" x="10" y="316" width="680" height="56" rx="10"/>
+<text class="dg-s" x="24" y="340">任何階段都可能發生。主對話超過 15 萬 token，context_guard.py 會提醒你先補 log 再下 /clear，只提醒不</text>
+<text class="dg-s" x="24" y="358">擋。</text>
+<rect class="dg-key" x="12" y="390" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="402">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="390" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="402">靠 Claude 照規則做</text>
+<rect class="dg-you" x="342.8" y="390" width="22" height="14" rx="4"/>
+<text class="dg-l" x="372.8" y="402">你做或你決定</text>
+</svg>
+<svg class="dg-narrow" viewBox="0 0 350 774" role="img" aria-labelledby="fig1n-t">
+<title id="fig1n-t">一個 session 從開場到收尾的六個階段。開場注入、派工前載模板、回合結束掃控制字元由 hook 做，決定要不要派、宣告完成前驗收、收尾寫 log 靠 Claude 照規則做。</title>
+<defs><marker id="fig1n-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-key" x="10" y="10" width="330" height="96" rx="10"/>
+<text class="dg-t" x="24" y="34">1 開場</text>
+<text class="dg-l" x="326" y="34" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="56">SessionStart hook 注入 session_log 最新 1 筆</text>
+<text class="dg-s" x="24" y="74">全文，前 2 筆只放標題與下一步。Claude 照規則用 1</text>
+<text class="dg-s" x="24" y="92">到 2 句報告上次進度。</text>
+<path class="dg-line" d="M50,106 L50,128" marker-end="url(#fig1n-h)"/>
+<rect class="dg-box" x="10" y="130" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="154">2 要不要派</text>
+<text class="dg-l" x="326" y="154" text-anchor="end">自律</text>
+<text class="dg-s" x="24" y="176">預設自己做。要隔離大量內容、有可獨立完成的工作包、</text>
+<text class="dg-s" x="24" y="194">或需要獨立驗收，才派。</text>
+<path class="dg-line" d="M50,208 L50,230" marker-end="url(#fig1n-h)"/>
+<rect class="dg-key" x="10" y="232" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="256">3 派工前</text>
+<text class="dg-l" x="326" y="256" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="278">沒載入 dispatch-template 就派工，</text>
+<text class="dg-s" x="24" y="296">dispatch_gate.py 會擋下並說明原因。</text>
+<path class="dg-line" d="M50,310 L50,332" marker-end="url(#fig1n-h)"/>
+<rect class="dg-box" x="10" y="334" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="358">4 宣告完成前</text>
+<text class="dg-l" x="326" y="358" text-anchor="end">自律</text>
+<text class="dg-s" x="24" y="380">依三級決定怎麼驗。不派 verifier、跑測試貼輸出、</text>
+<text class="dg-s" x="24" y="398">或派 verifier。</text>
+<path class="dg-line" d="M50,412 L50,434" marker-end="url(#fig1n-h)"/>
+<rect class="dg-key" x="10" y="436" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="460">5 回合結束</text>
+<text class="dg-l" x="326" y="460" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="482">本回合寫過的 .md、.json、.py 混進控制字元，</text>
+<text class="dg-s" x="24" y="500">ctrl_char_stop.py 會擋下。</text>
+<path class="dg-line" d="M50,514 L50,536" marker-end="url(#fig1n-h)"/>
+<rect class="dg-box" x="10" y="538" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="562">6 收尾</text>
+<text class="dg-l" x="326" y="562" text-anchor="end">自律加腳本檢查</text>
+<text class="dg-s" x="24" y="584">用 add_session_log.py 在 session_log 頂部補</text>
+<text class="dg-s" x="24" y="602">一筆，腳本檢查格式。做完的 TODO 整條刪掉。</text>
+<rect class="dg-note" x="10" y="630" width="330" height="74" rx="10"/>
+<text class="dg-s" x="24" y="654">任何階段都可能發生。主對話超過 15 萬 token，</text>
+<text class="dg-s" x="24" y="672">context_guard.py 會提醒你先補 log 再下</text>
+<text class="dg-s" x="24" y="690">/clear，只提醒不擋。</text>
+<rect class="dg-key" x="12" y="722" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="734">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="722" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="734">靠 Claude 照規則做</text>
+<rect class="dg-you" x="12" y="744" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="756">你做或你決定</text>
+</svg>
+<figcaption>一個 session 的六個階段。開場注入、派工前載模板、回合結束掃控制字元由 hook 負責，其餘靠規則。各階段對應的檔案見<a href="https://wayhong0928.github.io/claude-workflow-template/docs/how-it-works.html">運作方式</a>。</figcaption>
+</figure>
+
+  <h3>派工到驗收</h3>
+<figure class="diagram">
+<svg class="dg-wide" viewBox="0 0 700 420" role="img" aria-labelledby="fig2w-t">
+<title id="fig2w-t">派 subagent 到驗收的流程。先問要不要派，要派就先載入 dispatch-template，subagent 回報後依三級驗收，沒過先續問原 agent，再不過換更強的模型，最多到 opus 一輪就停下來交給使用者。</title>
+<defs><marker id="fig2w-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="180" height="204" rx="10"/>
+<text class="dg-t" x="24" y="34">要派嗎</text>
+<text class="dg-l" x="176" y="34" text-anchor="end">自律</text>
+<text class="dg-s" x="24" y="56">要隔離大量內容、有可獨立</text>
+<text class="dg-s" x="24" y="74">完成的工作包、或需要獨立</text>
+<text class="dg-s" x="24" y="92">驗收，至少一項成立才派。</text>
+<text class="dg-s" x="24" y="110">都不成立，主對話自己做。</text>
+<rect class="dg-key" x="260" y="10" width="180" height="204" rx="10"/>
+<text class="dg-t" x="274" y="34">載入模板</text>
+<text class="dg-l" x="426" y="34" text-anchor="end">機制</text>
+<text class="dg-s" x="274" y="56">載入</text>
+<text class="dg-s" x="274" y="74">dispatch-template，</text>
+<text class="dg-s" x="274" y="92">寫目標與動機、驗收條件、</text>
+<text class="dg-s" x="274" y="110">回報格式，並指定模型。每</text>
+<text class="dg-s" x="274" y="128">個 session 一次。沒載入</text>
+<text class="dg-s" x="274" y="146">就派（compact 後沒重載</text>
+<text class="dg-s" x="274" y="164">也算），</text>
+<text class="dg-s" x="274" y="182">dispatch_gate.py 擋下，</text>
+<text class="dg-s" x="274" y="200">只有 fork 免檢。</text>
+<rect class="dg-box" x="510" y="10" width="180" height="204" rx="10"/>
+<text class="dg-t" x="524" y="34">依三級驗收</text>
+<text class="dg-l" x="676" y="34" text-anchor="end">自律</text>
+<text class="dg-s" x="524" y="56">0 級不派 verifier，1 級</text>
+<text class="dg-s" x="524" y="74">跑測試貼輸出，2 級派</text>
+<text class="dg-s" x="524" y="92">fresh-context 的</text>
+<text class="dg-s" x="524" y="110">verifier。通過就完成。</text>
+<rect class="dg-you" x="10" y="276" width="180" height="96" rx="10"/>
+<text class="dg-t" x="24" y="300">交給你決定</text>
+<text class="dg-l" x="176" y="300" text-anchor="end">你</text>
+<text class="dg-s" x="24" y="322">最多升到 opus 一輪。再不</text>
+<text class="dg-s" x="24" y="340">過就停下來，把失敗紀錄整</text>
+<text class="dg-s" x="24" y="358">理給你。</text>
+<rect class="dg-box" x="260" y="276" width="180" height="96" rx="10"/>
+<text class="dg-t" x="274" y="300">換更強的模型</text>
+<text class="dg-l" x="426" y="300" text-anchor="end">自律</text>
+<text class="dg-s" x="274" y="322">方向就錯，或續問後還不過。</text>
+<text class="dg-s" x="274" y="340">重派時附上前兩次的失敗紀</text>
+<text class="dg-s" x="274" y="358">錄。</text>
+<rect class="dg-box" x="510" y="276" width="180" height="96" rx="10"/>
+<text class="dg-t" x="524" y="300">續問原 agent</text>
+<text class="dg-l" x="676" y="300" text-anchor="end">自律</text>
+<text class="dg-s" x="524" y="322">方向對、細節錯時，先續問</text>
+<text class="dg-s" x="524" y="340">同一個 agent 一次，它還</text>
+<text class="dg-s" x="524" y="358">保有上下文。</text>
+<path class="dg-line" d="M191,44 L259,44" marker-end="url(#fig2w-h)"/>
+<text class="dg-l" x="225" y="36" text-anchor="middle">要派</text>
+<path class="dg-line" d="M441,44 L509,44" marker-end="url(#fig2w-h)"/>
+<text class="dg-l" x="475" y="36" text-anchor="middle">做完回報</text>
+<path class="dg-line" d="M600.0,214 L600.0,275" marker-end="url(#fig2w-h)"/>
+<text class="dg-l" x="610" y="250" text-anchor="start">不過</text>
+<path class="dg-line" d="M509,310 L441,310" marker-end="url(#fig2w-h)"/>
+<text class="dg-l" x="475" y="302" text-anchor="middle">還不過</text>
+<path class="dg-line" d="M259,310 L191,310" marker-end="url(#fig2w-h)"/>
+<text class="dg-l" x="225" y="302" text-anchor="middle">還不過</text>
+<rect class="dg-key" x="12" y="390" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="402">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="390" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="402">靠 Claude 照規則做</text>
+<rect class="dg-you" x="342.8" y="390" width="22" height="14" rx="4"/>
+<text class="dg-l" x="372.8" y="402">你做或你決定</text>
+</svg>
+<svg class="dg-narrow" viewBox="0 0 350 712" role="img" aria-labelledby="fig2n-t">
+<title id="fig2n-t">派 subagent 到驗收的流程。先問要不要派，要派就先載入 dispatch-template，subagent 回報後依三級驗收，沒過先續問原 agent，再不過換更強的模型，最多到 opus 一輪就停下來交給使用者。</title>
+<defs><marker id="fig2n-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="34">要派嗎</text>
+<text class="dg-l" x="326" y="34" text-anchor="end">自律</text>
+<text class="dg-s" x="24" y="56">要隔離大量內容、有可獨立完成的工作包、或需要獨立</text>
+<text class="dg-s" x="24" y="74">驗收，至少一項成立才派。都不成立，主對話自己做。</text>
+<path class="dg-line" d="M50,88 L50,112" marker-end="url(#fig2n-h)"/>
+<text class="dg-l" x="62" y="105" text-anchor="start">要派</text>
+<rect class="dg-key" x="10" y="114" width="330" height="114" rx="10"/>
+<text class="dg-t" x="24" y="138">載入模板</text>
+<text class="dg-l" x="326" y="138" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="160">載入 dispatch-template，寫目標與動機、驗收條</text>
+<text class="dg-s" x="24" y="178">件、回報格式，並指定模型。每個 session 一次。沒</text>
+<text class="dg-s" x="24" y="196">載入就派（compact 後沒重載也算），</text>
+<text class="dg-s" x="24" y="214">dispatch_gate.py 擋下，只有 fork 免檢。</text>
+<path class="dg-line" d="M50,228 L50,252" marker-end="url(#fig2n-h)"/>
+<text class="dg-l" x="62" y="245" text-anchor="start">做完回報</text>
+<rect class="dg-box" x="10" y="254" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="278">依三級驗收</text>
+<text class="dg-l" x="326" y="278" text-anchor="end">自律</text>
+<text class="dg-s" x="24" y="300">0 級不派 verifier，1 級跑測試貼輸出，2 級派</text>
+<text class="dg-s" x="24" y="318">fresh-context 的 verifier。通過就完成。</text>
+<path class="dg-line" d="M50,332 L50,356" marker-end="url(#fig2n-h)"/>
+<text class="dg-l" x="62" y="349" text-anchor="start">不過</text>
+<rect class="dg-box" x="10" y="358" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="382">續問原 agent</text>
+<text class="dg-l" x="326" y="382" text-anchor="end">自律</text>
+<text class="dg-s" x="24" y="404">方向對、細節錯時，先續問同一個 agent 一次，它還</text>
+<text class="dg-s" x="24" y="422">保有上下文。</text>
+<path class="dg-line" d="M50,436 L50,460" marker-end="url(#fig2n-h)"/>
+<text class="dg-l" x="62" y="453" text-anchor="start">還不過</text>
+<rect class="dg-box" x="10" y="462" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="486">換更強的模型</text>
+<text class="dg-l" x="326" y="486" text-anchor="end">自律</text>
+<text class="dg-s" x="24" y="508">方向就錯，或續問後還不過。重派時附上前兩次的失敗</text>
+<text class="dg-s" x="24" y="526">紀錄。</text>
+<path class="dg-line" d="M50,540 L50,564" marker-end="url(#fig2n-h)"/>
+<text class="dg-l" x="62" y="557" text-anchor="start">還不過</text>
+<rect class="dg-you" x="10" y="566" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="590">交給你決定</text>
+<text class="dg-l" x="326" y="590" text-anchor="end">你</text>
+<text class="dg-s" x="24" y="612">最多升到 opus 一輪。再不過就停下來，把失敗紀錄整</text>
+<text class="dg-s" x="24" y="630">理給你。</text>
+<rect class="dg-key" x="12" y="660" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="672">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="660" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="672">靠 Claude 照規則做</text>
+<rect class="dg-you" x="12" y="682" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="694">你做或你決定</text>
+</svg>
+<figcaption>派 subagent 到驗收。載模板這一步有 hook 把關，其餘靠規則。原理見 ai-agent-notes 的<a href="https://wayhong0928.github.io/ai-agent-notes/pages/subagent.html">Subagent 入門與實戰</a>，hook 怎麼擋見<a href="https://wayhong0928.github.io/ai-agent-notes/pages/hooks-subagents.html">Hooks 與 Subagent 設定</a>，完整規則見 <a href="https://github.com/wayhong0928/claude-workflow-template/blob/main/template/.claude/rules/dispatch-and-verify.md"><code>dispatch-and-verify.md</code></a>。</figcaption>
+</figure>
+
+  <h3>驗收分三級</h3>
+<figure class="diagram">
+<svg class="dg-wide" viewBox="0 0 700 349" role="img" aria-labelledby="fig3w-t">
+<title id="fig3w-t">驗收分三級。0 級是照抄與單行修改，不派 verifier。1 級是批次修改、程式與腳本，跑測試並貼出輸出。2 級是論文正文、公開網站內容、規則檔與報告結論，派 fresh-context 的 verifier。</title>
+<defs><marker id="fig3w-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="214" height="209" rx="10"/>
+<text class="dg-t" x="24" y="34">0 級　不派</text>
+<text class="dg-l" x="24" y="56">產出</text>
+<text class="dg-s" x="24" y="74">照抄使用者提供的內容、</text>
+<text class="dg-s" x="24" y="92">session_log、TODO、搬檔、</text>
+<text class="dg-s" x="24" y="110">單行修改</text>
+<text class="dg-l" x="24" y="133">怎麼驗</text>
+<text class="dg-s" x="24" y="151">不派 verifier，回報寫明理由</text>
+<rect class="dg-box" x="243" y="10" width="214" height="209" rx="10"/>
+<text class="dg-t" x="257" y="34">1 級　跑測試</text>
+<text class="dg-l" x="257" y="56">產出</text>
+<text class="dg-s" x="257" y="74">批次修改、數字加總、程式、腳</text>
+<text class="dg-s" x="257" y="92">本、hook</text>
+<text class="dg-l" x="257" y="115">怎麼驗</text>
+<text class="dg-s" x="257" y="133">跑腳本或測試，把輸出貼出來當</text>
+<text class="dg-s" x="257" y="151">證據</text>
+<rect class="dg-key" x="476" y="10" width="214" height="209" rx="10"/>
+<text class="dg-t" x="490" y="34">2 級　派 verifier</text>
+<text class="dg-l" x="490" y="56">產出</text>
+<text class="dg-s" x="490" y="74">論文正文與文獻筆記、公開網站</text>
+<text class="dg-s" x="490" y="92">內容、規則檔、報告的結論與出</text>
+<text class="dg-s" x="490" y="110">處</text>
+<text class="dg-l" x="490" y="133">怎麼驗</text>
+<text class="dg-s" x="490" y="151">派 fresh-context 的</text>
+<text class="dg-s" x="490" y="169">verifier，只給驗收條件與檔案。</text>
+<text class="dg-s" x="490" y="187">高風險判斷再加一路 opus 第二</text>
+<text class="dg-s" x="490" y="205">意見</text>
+<path class="dg-line" d="M16,245 L684,245" marker-end="url(#fig3w-h)"/>
+<text class="dg-l" x="350" y="237" text-anchor="middle">風險愈高，驗收愈獨立</text>
+<rect class="dg-note" x="10" y="263" width="680" height="38" rx="10"/>
+<text class="dg-s" x="24" y="287">拿不準在哪一級，往上一級算。verifier 不修檔這一點寫在它的指示裡，沒有技術上鎖住。</text>
+<rect class="dg-key" x="12" y="319" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="331">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="319" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="331">靠 Claude 照規則做</text>
+<rect class="dg-you" x="342.8" y="319" width="22" height="14" rx="4"/>
+<text class="dg-l" x="372.8" y="331">你做或你決定</text>
+</svg>
+<svg class="dg-narrow" viewBox="0 0 350 613" role="img" aria-labelledby="fig3n-t">
+<title id="fig3n-t">驗收分三級。0 級是照抄與單行修改，不派 verifier。1 級是批次修改、程式與腳本，跑測試並貼出輸出。2 級是論文正文、公開網站內容、規則檔與報告結論，派 fresh-context 的 verifier。</title>
+<defs><marker id="fig3n-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="330" height="137" rx="10"/>
+<text class="dg-t" x="24" y="34">0 級　不派</text>
+<text class="dg-l" x="24" y="56">產出</text>
+<text class="dg-s" x="24" y="74">照抄使用者提供的內容、session_log、TODO、搬檔、</text>
+<text class="dg-s" x="24" y="92">單行修改</text>
+<text class="dg-l" x="24" y="115">怎麼驗</text>
+<text class="dg-s" x="24" y="133">不派 verifier，回報寫明理由</text>
+<path class="dg-line" d="M50,147 L50,171" marker-end="url(#fig3n-h)"/>
+<text class="dg-l" x="62" y="164" text-anchor="start">風險愈高</text>
+<rect class="dg-box" x="10" y="173" width="330" height="119" rx="10"/>
+<text class="dg-t" x="24" y="197">1 級　跑測試</text>
+<text class="dg-l" x="24" y="219">產出</text>
+<text class="dg-s" x="24" y="237">批次修改、數字加總、程式、腳本、hook</text>
+<text class="dg-l" x="24" y="260">怎麼驗</text>
+<text class="dg-s" x="24" y="278">跑腳本或測試，把輸出貼出來當證據</text>
+<path class="dg-line" d="M50,292 L50,316" marker-end="url(#fig3n-h)"/>
+<text class="dg-l" x="62" y="309" text-anchor="start">驗收愈獨立</text>
+<rect class="dg-key" x="10" y="318" width="330" height="155" rx="10"/>
+<text class="dg-t" x="24" y="342">2 級　派 verifier</text>
+<text class="dg-l" x="24" y="364">產出</text>
+<text class="dg-s" x="24" y="382">論文正文與文獻筆記、公開網站內容、規則檔、報告的</text>
+<text class="dg-s" x="24" y="400">結論與出處</text>
+<text class="dg-l" x="24" y="423">怎麼驗</text>
+<text class="dg-s" x="24" y="441">派 fresh-context 的 verifier，只給驗收條件與</text>
+<text class="dg-s" x="24" y="459">檔案。高風險判斷再加一路 opus 第二意見</text>
+<rect class="dg-note" x="10" y="487" width="330" height="56" rx="10"/>
+<text class="dg-s" x="24" y="511">拿不準在哪一級，往上一級算。verifier 不修檔這一</text>
+<text class="dg-s" x="24" y="529">點寫在它的指示裡，沒有技術上鎖住。</text>
+<rect class="dg-key" x="12" y="561" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="573">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="561" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="573">靠 Claude 照規則做</text>
+<rect class="dg-you" x="12" y="583" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="595">你做或你決定</text>
+</svg>
+<figcaption>驗收三級，拿不準就往上一級。分級背後的原則見 ai-agent-notes 的<a href="https://wayhong0928.github.io/ai-agent-notes/pages/harness.html">把 AI 代理的工作環境設計得可靠</a>。</figcaption>
+</figure>
+
+  <h3>session_log 與 TODO 接力</h3>
+<figure class="diagram">
+<svg class="dg-wide" viewBox="0 0 700 321" role="img" aria-labelledby="fig4w-t">
+<title id="fig4w-t">session_log 記做了什麼，TODO 記還沒做什麼。收尾時兩個檔各寫一筆，下個 session 開場 hook 只注入 session_log 的最新三筆，下一步指向 TODO 的某一條。</title>
+<defs><marker id="fig4w-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="30" width="335" height="119" rx="10"/>
+<text class="dg-t" x="24" y="54">session_log.md</text>
+<text class="dg-l" x="331" y="54" text-anchor="end">記做了什麼</text>
+<text class="dg-s" x="24" y="76">每筆三段，做了什麼、決定了什麼、下一步，合計 600</text>
+<text class="dg-s" x="24" y="94">字內。新的一筆用 add_session_log.py 插到最上面。</text>
+<text class="dg-s" x="24" y="117">下一步只寫做到哪裡中斷，指向 TODO 的哪一條，不重</text>
+<text class="dg-s" x="24" y="135">抄。</text>
+<rect class="dg-box" x="355" y="30" width="335" height="119" rx="10"/>
+<text class="dg-t" x="369" y="54">TODO.md</text>
+<text class="dg-l" x="676" y="54" text-anchor="end">記還沒做什麼</text>
+<text class="dg-s" x="369" y="76">你要做的事和之後要做的事都寫在這裡，做完就整條刪</text>
+<text class="dg-s" x="369" y="94">掉。</text>
+<text class="dg-s" x="369" y="117">不要留在 log 裡，因為開場只帶最新 3 筆，舊的很快</text>
+<text class="dg-s" x="369" y="135">被擠掉。</text>
+<text class="dg-l" x="10" y="20" text-anchor="start">收尾時各寫一次</text>
+<rect class="dg-key" x="10" y="197" width="680" height="78" rx="10"/>
+<text class="dg-t" x="24" y="221">下個 session 開場</text>
+<text class="dg-l" x="676" y="221" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="243">SessionStart hook 注入 session_log 最新 1 筆全文，第 2、3 筆只放標題與下一步。Claude 先用 1 到 2 句報</text>
+<text class="dg-s" x="24" y="261">告上次進度與待辦。TODO.md 不在注入範圍，靠 log 的下一步指過去。</text>
+<path class="dg-line" d="M177.5,149 L177.5,196" marker-end="url(#fig4w-h)"/>
+<text class="dg-l" x="187.5" y="179" text-anchor="start">開場注入</text>
+<rect class="dg-key" x="12" y="291" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="303">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="291" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="303">靠 Claude 照規則做</text>
+<rect class="dg-you" x="342.8" y="291" width="22" height="14" rx="4"/>
+<text class="dg-l" x="372.8" y="303">你做或你決定</text>
+</svg>
+<svg class="dg-narrow" viewBox="0 0 350 500" role="img" aria-labelledby="fig4n-t">
+<title id="fig4n-t">session_log 記做了什麼，TODO 記還沒做什麼。收尾時兩個檔各寫一筆，下個 session 開場 hook 只注入 session_log 的最新三筆，下一步指向 TODO 的某一條。</title>
+<defs><marker id="fig4n-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="330" height="137" rx="10"/>
+<text class="dg-t" x="24" y="34">session_log.md</text>
+<text class="dg-l" x="326" y="34" text-anchor="end">記做了什麼</text>
+<text class="dg-s" x="24" y="56">每筆三段，做了什麼、決定了什麼、下一步，合計 600</text>
+<text class="dg-s" x="24" y="74">字內。新的一筆用 add_session_log.py 插到最上</text>
+<text class="dg-s" x="24" y="92">面。</text>
+<text class="dg-s" x="24" y="115">下一步只寫做到哪裡中斷，指向 TODO 的哪一條，不重</text>
+<text class="dg-s" x="24" y="133">抄。</text>
+<path class="dg-line" d="M50,147 L50,171" marker-end="url(#fig4n-h)"/>
+<rect class="dg-box" x="10" y="173" width="330" height="119" rx="10"/>
+<text class="dg-t" x="24" y="197">TODO.md</text>
+<text class="dg-l" x="326" y="197" text-anchor="end">記還沒做什麼</text>
+<text class="dg-s" x="24" y="219">你要做的事和之後要做的事都寫在這裡，做完就整條刪</text>
+<text class="dg-s" x="24" y="237">掉。</text>
+<text class="dg-s" x="24" y="260">不要留在 log 裡，因為開場只帶最新 3 筆，舊的很快</text>
+<text class="dg-s" x="24" y="278">被擠掉。</text>
+<path class="dg-line" d="M50,292 L50,316" marker-end="url(#fig4n-h)"/>
+<text class="dg-l" x="62" y="309" text-anchor="start">log 的最新 3 筆</text>
+<rect class="dg-key" x="10" y="318" width="330" height="114" rx="10"/>
+<text class="dg-t" x="24" y="342">下個 session 開場</text>
+<text class="dg-l" x="326" y="342" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="364">SessionStart hook 注入 session_log 最新 1 筆</text>
+<text class="dg-s" x="24" y="382">全文，第 2、3 筆只放標題與下一步。Claude 先用 1</text>
+<text class="dg-s" x="24" y="400">到 2 句報告上次進度與待辦。TODO.md 不在注入範圍，</text>
+<text class="dg-s" x="24" y="418">靠 log 的下一步指過去。</text>
+<rect class="dg-key" x="12" y="448" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="460">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="448" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="460">靠 Claude 照規則做</text>
+<rect class="dg-you" x="12" y="470" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="482">你做或你決定</text>
+</svg>
+<figcaption>session_log 記做了什麼，TODO 記還沒做什麼。接力的原理見 ai-agent-notes 的<a href="https://wayhong0928.github.io/ai-agent-notes/pages/session-handoff.html">跨 session 接力</a>，每一筆的寫法見 <a href="https://github.com/wayhong0928/claude-workflow-template/blob/main/template/.claude/session-log-kit/README.md">session-log-kit 的 README</a>。</figcaption>
+</figure>
+
+  <h3>TODO 側欄（選用）</h3>
+<figure class="diagram">
+<svg class="dg-wide" viewBox="0 0 700 148" role="img" aria-labelledby="fig5w-t">
+<title id="fig5w-t">TODO 側欄的資料流，白話版。你寫的 TODO、session_log 的下一步和計畫檔由 todo_core.py 整理。開場清單是它當場印的，/todo 和側欄讀它寫的 todo_index.json。</title>
+<defs><marker id="fig5w-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="200" height="96" rx="10"/>
+<text class="dg-t" x="24" y="34">你寫的檔</text>
+<text class="dg-s" x="24" y="56">TODO.md、session_log 的</text>
+<text class="dg-s" x="24" y="74">下一步、goal 計畫檔。</text>
+<rect class="dg-key" x="250" y="10" width="200" height="96" rx="10"/>
+<text class="dg-t" x="264" y="34">todo_core.py</text>
+<text class="dg-l" x="436" y="34" text-anchor="end">機制</text>
+<text class="dg-s" x="264" y="56">開場清單當場印出；</text>
+<text class="dg-s" x="264" y="74">/todo 與側欄讀它寫的</text>
+<text class="dg-s" x="264" y="92">todo_index.json。</text>
+<rect class="dg-box" x="490" y="10" width="200" height="96" rx="10"/>
+<text class="dg-t" x="504" y="34">你看到的</text>
+<text class="dg-s" x="504" y="56">開場清單、/todo、TODO 側欄、</text>
+<text class="dg-s" x="504" y="74">輸入框上方的下一步。</text>
+<path class="dg-line" d="M211,44 L249,44" marker-end="url(#fig5w-h)"/>
+<path class="dg-line" d="M451,44 L489,44" marker-end="url(#fig5w-h)"/>
+<rect class="dg-key" x="12" y="118" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="130">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="118" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="130">靠 Claude 照規則做</text>
+</svg>
+<svg class="dg-narrow" viewBox="0 0 350 300" role="img" aria-labelledby="fig5n-t">
+<title id="fig5n-t">TODO 側欄的資料流，白話版。你寫的 TODO、session_log 的下一步和計畫檔由 todo_core.py 整理。開場清單是它當場印的，/todo 和側欄讀它寫的 todo_index.json。</title>
+<defs><marker id="fig5n-h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="dg-head" d="M0,0 L10,5 L0,10 z"/></marker></defs>
+<rect class="dg-box" x="10" y="10" width="330" height="60" rx="10"/>
+<text class="dg-t" x="24" y="34">你寫的檔</text>
+<text class="dg-s" x="24" y="56">TODO.md、session_log 的下一步、goal 計畫檔。</text>
+<path class="dg-line" d="M50,70 L50,92" marker-end="url(#fig5n-h)"/>
+<rect class="dg-key" x="10" y="94" width="330" height="78" rx="10"/>
+<text class="dg-t" x="24" y="118">todo_core.py</text>
+<text class="dg-l" x="326" y="118" text-anchor="end">機制</text>
+<text class="dg-s" x="24" y="140">開場清單當場印出；/todo 與側欄讀它寫的</text>
+<text class="dg-s" x="24" y="158">todo_index.json，它只寫這一個檔。</text>
+<path class="dg-line" d="M50,172 L50,194" marker-end="url(#fig5n-h)"/>
+<rect class="dg-box" x="10" y="196" width="330" height="60" rx="10"/>
+<text class="dg-t" x="24" y="220">你看到的</text>
+<text class="dg-s" x="24" y="242">開場清單、/todo、TODO 側欄、輸入框上方的下一步。</text>
+<rect class="dg-key" x="12" y="270" width="22" height="14" rx="4"/>
+<text class="dg-l" x="42" y="282">hook 自動做或自動擋</text>
+<rect class="dg-box" x="180.4" y="270" width="22" height="14" rx="4"/>
+<text class="dg-l" x="210.4" y="282">靠 Claude 照規則做</text>
+</svg>
+<figcaption>選用的 /todo plugin（todo@workflow-kit）把幾個專案的 TODO 集中起來看。到期日過了，開場清單只提醒，不移動也不修改任何檔。側欄怎麼做見 ai-agent-notes 的<a href="https://wayhong0928.github.io/ai-agent-notes/pages/mods.html">Mods</a>，設定與格式見 <a href="https://github.com/wayhong0928/claude-workflow-template/blob/main/todo/README.md">todo plugin 的 README</a>。</figcaption>
+</figure>
+
+  <h3>護欄</h3>
+  <ul>
+    <li>回合結束時，<code>ctrl_char_stop.py</code> 會掃本回合寫過的檔，混進看不見的控制字元就擋下，同一回合最多擋 1 次。</li>
+    <li>主對話超過 15 萬 token，<code>context_guard.py</code> 提醒你補 log 再下 <code>/clear</code>，只提醒，不擋。</li>
+    <li>不能改的原始資料（PDF、問卷原始檔）可以上鎖。plugin 版在 setup 的問題裡選，備用裝法用 <code>--protect</code>。Claude 用編輯工具或 <code>&gt;</code> 重導向都改不了，腳本自己開檔寫入擋不到，說明見 <a href="https://github.com/wayhong0928/claude-workflow-template#保護原始資料">README 的保護原始資料</a>。</li>
+  </ul>
+  <p class="note">hook 自己出錯時一律放行，不會卡住工作。</p>
+</section>
+
+<section id="limits">
+  <h2>已知限制</h2>
+  <ul>
+    <li>規則檔和 <code>dispatch-template</code> 是寫給 Claude 看的，它不一定每次都照做。會強制的只有 hook 那幾項。</li>
+    <li>hook 出錯時一律放行，不會卡住你，但壞掉時也不會有提示。改了 hook 請跑測試。</li>
+    <li>hook 用的 Python 指令名是照安裝當下的環境設的。同一個專案資料夾同時從 Windows 和 WSL 開，另一邊的 hook 會全部失敗，派工檢查也跟著失效。</li>
+    <li>實機只在 Windows 原生跑過。WSL2（Ubuntu）跑過 hook 與安裝程式的測試，macOS 沒測過。</li>
+    <li>只支援 Claude Code，Codex 不讀 <code>.claude/</code>。原始資料的鎖擋不到腳本自己開檔寫入。</li>
+  </ul>
+  <p>每一條的細節和其他限制，見 <a href="https://github.com/wayhong0928/claude-workflow-template#已知限制">README 的已知限制</a>。</p>
 </section>
 
 <footer>
