@@ -1,0 +1,50 @@
+{
+  "description": "index：重產 todo_index.json（stdout 零輸出）；render：開場清單；todo_lint.py：改到 TODO 後檢查格式，只警告。找 Python 的順序是 python3、python、py，要 3.8 以上，都沒有就安靜跳過。",
+  "modules": ["./register.tsx"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "for P in python3 python py; do \"$P\" -c 'import sys; sys.exit(sys.version_info < (3, 8))' </dev/null >/dev/null 2>&1 && break; P=; done; [ -z \"$P\" ] || \"$P\" \"${CLAUDE_PLUGIN_ROOT}/scripts/todo_core.py\" index </dev/null; true",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "for P in python3 python py; do \"$P\" -c 'import sys; sys.exit(sys.version_info < (3, 8))' </dev/null >/dev/null 2>&1 && break; P=; done; [ -z \"$P\" ] || \"$P\" \"${CLAUDE_PLUGIN_ROOT}/scripts/todo_core.py\" render; true",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "for P in python3 python py; do \"$P\" -c 'import sys; sys.exit(sys.version_info < (3, 8))' </dev/null >/dev/null 2>&1 && break; P=; done; [ -z \"$P\" ] || \"$P\" \"${CLAUDE_PLUGIN_ROOT}/scripts/todo_core.py\" index </dev/null; true",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "for P in python3 python py; do \"$P\" -c 'import sys; sys.exit(sys.version_info < (3, 8))' </dev/null >/dev/null 2>&1 && break; P=; done; [ -z \"$P\" ] || \"$P\" \"${CLAUDE_PLUGIN_ROOT}/scripts/todo_lint.py\"; true",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "for P in python3 python py; do \"$P\" -c 'import sys; sys.exit(sys.version_info < (3, 8))' </dev/null >/dev/null 2>&1 && break; P=; done; [ -z \"$P\" ] || \"$P\" \"${CLAUDE_PLUGIN_ROOT}/scripts/todo_core.py\" index </dev/null; true",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
