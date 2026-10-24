@@ -6,8 +6,10 @@
 而且失效是靜默的：派工照樣成功，只是品質默默變差）。這支 hook 就是補這個缺口。
 
 刻意不攔的情況：
-- `subagent_type: "fork"`——fork 會繼承主對話的完整 context，模板那套「它什麼都不知道，
-  要給它目標／動機／驗收條件」的前提不成立。
+- `subagent_type: "fork"`：fork 會繼承主對話的完整 context，模板那套「它什麼都不知道，
+  要給它目標／動機／驗收條件」的前提不成立。代價：fork 用主對話的模型、不吃 `model` 參數，
+  而 fork mode 預設開啟、Claude 會自己決定開 fork，所以「顯式指定 model」這條規則對 fork 無效
+  （規則檔要求要指定 model 的派工不要用 fork）。
 - 呼叫 `dispatch-template` skill 本身（那正是我們要求的動作，由 skill_gate_flag_writer 記錄；
   使用者直接打 `/dispatch-template` 也算，走 UserPromptExpansion）。
 
@@ -17,6 +19,8 @@
 Fail-open：任何例外、任何判斷不確定的情況一律放行，不阻擋正常工作。
 
 判斷規則：本 session 叫用過一次就算數，compact 後要重叫（判斷邏輯在 `gate_flags.py`）。
+compact 包括使用者沒下 `/compact` 的情況：對話太長時的自動壓縮，以及閒置自動壓縮
+（2.1.299 起預設開啟，20 萬 token 以上的對話閒置約 54 分鐘就壓縮）。
 擋下的事件記進 gate_trial.log（action: deny，位置見 hook_state.py），方便事後檢討有沒有誤擋。
 """
 import json
@@ -64,7 +68,7 @@ def main():
             return allow()
 
         session_id = hook_input.get("session_id", "unknown")
-        if skill_called_in_session(session_id, REQUIRED_SKILL, hook_input.get("transcript_path")):
+        if skill_called_in_session(session_id, REQUIRED_SKILL):
             return allow()
 
         label = subagent or "（未指定型別）"
@@ -72,8 +76,9 @@ def main():
         desc = str(tool_input.get("description") or "")
         log_block(GATE_NAME, session_id, f"派 {label}｜model={model}｜{desc}")
         return deny(
-            f"這次要派 {label} subagent，但本 session 還沒叫用過 {REQUIRED_SKILL} skill"
-            f"（或叫用後發生過 compact）。派工三件套（目標與動機／驗收條件／回報格式）、"
+            f"這次要派 {label} subagent，但本 session 還沒叫用過 {REQUIRED_SKILL} skill，"
+            f"或叫用後對話被壓縮過（手動 /compact、自動壓縮、閒置自動壓縮都算；壓縮後 skill 只留開頭 "
+            f"5,000 tokens，後段可能被截掉）。派工三件套（目標與動機／驗收條件／回報格式）、"
             f"回報合約全文、平行派工前的四項檢查、多樣本評審怎麼確保真獨立，都在那個 skill 裡。"
             f"請先用 Skill 工具呼叫 {REQUIRED_SKILL}，再重試這次派工。"
         )

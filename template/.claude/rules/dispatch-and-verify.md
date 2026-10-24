@@ -1,6 +1,6 @@
 # Claude Code 模型調度守則
 
-> 這份放在 `.claude/rules/`，Claude Code 每個 session 開場會自動載入。派工的 prompt 模板、模型選型、回報合約在 `.claude/skills/dispatch-template/SKILL.md`，派 subagent 前叫用它（`.claude/hooks/dispatch_gate.py` 會強制：本 session 沒叫用過、或叫用後發生過 compact 就擋）。
+> 這份放在 `.claude/rules/`，Claude Code 每個 session 開場會自動載入。派工的 prompt 模板、模型選型、回報合約在 `.claude/skills/dispatch-template/SKILL.md`，派 subagent 前叫用它（`.claude/hooks/dispatch_gate.py` 會強制：本 session 沒叫用過、或叫用後對話被壓縮過就擋；手動 `/compact`、自動壓縮、閒置自動壓縮都算）。
 
 ## 第一原則：有收益才委派
 
@@ -19,7 +19,9 @@
 | 規劃複雜實作 | `Plan`（內建） | 方法不確定，或改動在多個檔案之間互相牽動 |
 | 驗收產出 | `verifier`（自訂，見下） | 第 2 級產出一律派，見「驗證不自驗」的分級表 |
 
-動到多個檔案、要跑很多回合的工作，先在 plan mode 提計畫，附可逐條勾選的驗收條件；使用者核准（建議選 auto mode）後，建議使用者下 `/goal`，條件寫成對話裡貼得出來的檢查結果，加上途中不能動的檔案和回合上限。`/goal` 由使用者在輸入框輸入。
+**fork 不能指定模型**：fork 帶著主對話的完整 context，用的是主對話的模型，不看 `model` 參數，也不經過派工檢查。要指定模型的派工（haiku 批次、opus 第二意見、verifier）不要用 fork，改派 general-purpose、verifier 這類具名的 subagent 並帶 `model`。
+
+動到多個檔案、要跑很多回合的工作，先在 plan mode 提計畫，附可逐條勾選的驗收條件；使用者核准（建議選 auto mode）後，建議使用者下 `/goal`，條件寫成對話裡貼得出來的檢查結果，加上途中不能動的檔案和回合上限。`/goal` 由使用者在輸入框輸入。auto mode 要帳號、模型和組織設定都允許才會出現；`/goal` 每回合結束後會另外呼叫一個模型判斷條件，長任務會連續耗用額度，額度少的使用者，建議把回合上限設低一點。
 
 檔案數、行數、頁數可以當提醒（例如要讀的東西明顯很多時，想一下第 1 條是否成立），但不自動觸發派工。
 
@@ -33,6 +35,10 @@
 - 續問一次仍不過 → 才升級模型重派，附完整失敗軌跡（兩次都試了什麼、產出哪裡不對、驗收哪條沒過）。不附軌跡的升級等於重跑第三次。升級鏈最多走到 opus 一輪，opus 也不行就停，把失敗軌跡整理給使用者裁決。
 - **續問的禁區不變**：要派 verifier 的驗收（第 2 級）一律派 fresh-context 的 verifier，不得用 SendMessage 叫原 agent「再看一次」（見「驗證不自驗」）。
 - **opus 解出來之後 → 把解法寫成明確模式**（步驟＋範例＋邊界條件），降回 sonnet 或 haiku 批次套用到其餘案例。
+- **派出去報模型不可用或額度不足**（這不是品質問題，不走上面的升級鏈）：不要原樣重試。
+  - 訊息只點名某個模型（例如 Opus 的用量上限）：改派另一個模型，opus 換 sonnet、sonnet 換 haiku，回報時寫明降了級、可能少了什麼。
+  - 訊息是整個方案的用量上限（session 或每週上限），換模型也沒用：停下來告訴使用者上限何時重置，請他決定要等，還是先做不必派工的部分。
+  - 第 2 級驗收不能因為額度不夠就改成做的人自驗。派不出 verifier 時，照實告訴使用者「還沒經過獨立驗收」，由他決定等額度恢復或先收下。
 
 **升級之前先分辨病因**，動手前判斷是哪一種：
 
@@ -57,3 +63,12 @@
 - 驗收不過 → 回到升降級路徑，不是叫原 subagent「再看一次」。
 
 派 verifier 時用 **fresh-context** 的 `verifier` agent（定義在 `.claude/agents/verifier.md`，model: sonnet），prompt 只給驗收條件與檔案路徑，**不給**原始任務的推理過程（避免被帶著走）。
+
+## 額度有限時
+
+上面的規則預設隨時派得出 opus、額度也夠。Sonnet 能處理大部分工作，費用比 Opus 低（官方 costs 文件），verifier 又固定用 `effort: high`，第 2 級產出多的專案用量會偏高。使用者說額度少、方案沒有 opus，或已經碰過用量上限時，改用這個降級版：
+
+- 升級鏈最高到 sonnet。sonnet 也不過就停，把失敗軌跡整理給使用者裁決。
+- 高風險判斷的第二意見改成同一個模型的另一路：prompt 換一種寫法、只給檔案路徑不給前一路的結論（做法見 `dispatch-template` 的多樣本評審）。
+- 第 2 級驗收照派 verifier，但同一段工作合併成一次派工；複驗只給改過的點。
+- 要改 verifier 的 `effort` 或模型，請使用者自己改 `.claude/agents/verifier.md`，不要每次派工臨時覆寫。

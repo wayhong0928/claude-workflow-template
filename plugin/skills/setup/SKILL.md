@@ -78,5 +78,5 @@ plugin 不能改底部狀態列，狀態列又是使用者的全域設定，所�
 
 1. 列出這次建立或修改的檔案，每個一行，寫明是新建、有改、還是已經有了沒動。
 2. 印出 `.claude/settings.json` 目前的內容。
-3. 請使用者關掉 Claude Code、在同一個資料夾重開，打 `/hooks` 確認看得到 workflow-kit 的 6 個 hook（派工前檢查、skill 叫用紀錄 2 個、context 提醒、控制字元檢查、session_log 開場）。
+3. 請使用者關掉 Claude Code、在同一個資料夾重開，打 `/hooks` 確認看得到 workflow-kit 的 7 個 hook（派工前檢查、skill 叫用紀錄 2 個、context 提醒、控制字元檢查、壓縮後清掉載入紀錄、session_log 開場）。
 4. 下次開場會自動帶入 session_log，第一次因為還沒有紀錄，只會看到範本的說明。

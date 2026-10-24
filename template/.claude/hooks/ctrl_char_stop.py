@@ -8,7 +8,7 @@
 哪些檔案：只看本回合 transcript 裡有證據的路徑，而且 mtime 晚於本回合開始——
 - Write／Edit／NotebookEdit 的目標路徑；
 - Bash／PowerShell 命令、以及本回合用 Write 寫出的 .py／.ps1 內容裡出現的完整絕對路徑。
-  Windows 路徑（C:\...、C:/...、/c/...）與 POSIX 絕對路徑（/home/...、/Users/...、/mnt/c/...）都認；
+  Windows 路徑（C:\\...、C:/...、/c/...）與 POSIX 絕對路徑（/home/...、/Users/...、/mnt/c/...）都認；
   POSIX 路徑含空白時要有引號包住才抓得到。
 命令裡用變數組出來的路徑抓不到，會漏檢；subagent 寫的檔案記在另一份 transcript，也不在檢查範圍。
 這支只求擋住常見情況，不保證全抓。

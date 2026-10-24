@@ -1,7 +1,7 @@
 """把 claude-workflow-template 裝進一個專案，或從專案移除。只用 Python 標準函式庫。
 
 用法：
-  python install.py <專案資料夾> [--session-log | --no-session-log] [--protect 路徑 ...] [--dry-run]
+  python install.py <專案資料夾> [--session-log | --no-session-log] [--protect 路徑 ...] [--todo] [--dry-run]
   python install.py <專案資料夾> --uninstall [--dry-run]
 
 安裝會做的事：
@@ -10,6 +10,7 @@
   - 有給 --protect 時，在 settings.json 的 permissions.deny 加上 Edit 規則，讓 Claude 不能改那些檔案或資料夾
   - 專案沒有 CLAUDE.md 就建一份；裝 session_log 時在 CLAUDE.md 結尾加一段接力說明
   - 裝 session_log 時，專案沒有 session_log.md、TODO.md 就各建一份
+  - 有給 --todo 時，把 todo/scripts/ 的兩支腳本複製到 <專案>/.claude/todo/，settings.json 加開場清單與 TODO 格式檢查
   - 專案在 git repo 裡時，在 .gitignore 加上 hook 產生的本機狀態檔
 被覆蓋或修改的既有檔案，先備份到 <專案>/.claude/backup/workflow-template-<時間>/。
 重複執行不會重複加設定；--dry-run 只列出會做什麼，不動任何檔案。
@@ -41,6 +42,7 @@ CORE_FILES = [
     ".claude/hooks/skill_gate_flag_writer.py",
     ".claude/hooks/context_guard.py",
     ".claude/hooks/ctrl_char_stop.py",
+    ".claude/hooks/compact_flag_reset.py",
     ".claude/hooks/tests/run_tests.py",
     ".claude/skills/dispatch-template/SKILL.md",
     ".claude/agents/verifier.md",
@@ -52,27 +54,39 @@ SESSION_LOG_FILES = [
     ".claude/session-log-kit/archive_session_log.py",
     ".claude/session-log-kit/README.md",
 ]
+# --todo 才裝：todo 開場清單與 TODO 格式檢查。腳本正本在 todo/scripts/，這裡只複製，不放第二份
+TODO_SRC = HERE / "todo" / "scripts"
+TODO_FILES = [
+    ".claude/todo/todo_core.py",
+    ".claude/todo/todo_lint.py",
+]
 # 舊版裝進去的檔，現在已經不裝了；重裝或移除時一併收掉（先備份）
 LEGACY_FILES = [
     ".claude/session-log-kit/sessionstart_log.ps1",
     ".claude/session-log-kit/archive_session_log.ps1",
 ]
-# hook 執行時在 .claude/hooks/ 產生的本機狀態，移除時一併刪掉
+# hook 執行時產生的本機狀態，移除時一併刪掉。gate_trial.log 是可以人工填「該擋／誤擋」的紀錄，刪前先備份
 STATE_PATHS = [
     ".claude/hooks/skill_gate_flags",
     ".claude/hooks/gate_trial.log",
     ".claude/hooks/context_guard_state.json",
     ".claude/hooks/ctrl_char_stop_state.json",
     ".claude/hooks/__pycache__",
+    ".claude/session-log-kit/__pycache__",
+    ".claude/todo/__pycache__",
 ]
+STATE_BACKUP = {".claude/hooks/gate_trial.log"}
 # settings.json 裡哪些 hook 是這個 template 加的：看 args 有沒有指到這幾支腳本
 OUR_SCRIPTS = [
     "/.claude/hooks/dispatch_gate.py",
     "/.claude/hooks/skill_gate_flag_writer.py",
     "/.claude/hooks/context_guard.py",
     "/.claude/hooks/ctrl_char_stop.py",
+    "/.claude/hooks/compact_flag_reset.py",
     "/.claude/session-log-kit/sessionstart_log.py",
     "/.claude/session-log-kit/sessionstart_log.ps1",  # 舊版
+    "/.claude/todo/todo_core.py",
+    "/.claude/todo/todo_lint.py",
 ]
 MARK_START = "<!-- claude-workflow-template:start -->"
 MARK_END = "<!-- claude-workflow-template:end -->"
@@ -82,8 +96,11 @@ GITIGNORE_LINES = [
     ".claude/hooks/gate_trial.log",
     ".claude/hooks/*_state.json",
     ".claude/hooks/__pycache__/",
+    ".claude/session-log-kit/__pycache__/",
     ".claude/backup/",
 ]
+GITIGNORE_BACKUP = ".claude/backup/"
+GITIGNORE_TODO = [".claude/todo/__pycache__/"]  # 只在 --todo 時加；移除時一律拿掉
 
 
 class InstallError(Exception):
@@ -244,12 +261,14 @@ def protect_rule(target, raw):
     return f"Edit({pattern})"
 
 
-def merged_settings(current, session_log, py, protect=()):
+def merged_settings(current, session_log, py, protect=(), todo=False):
     new = json.loads(json.dumps(current))
     hooks = strip_ours(new.get("hooks", {}))
     add_ours(hooks, json.loads(read_text(TPL / "hooks-core.json")), py)
     if session_log:
         add_ours(hooks, json.loads(read_text(TPL / "hooks-session-log.json")), py)
+    if todo:
+        add_ours(hooks, json.loads(read_text(TPL / "hooks-todo.json")), py)
     new["hooks"] = hooks
     if protect:
         deny = new.setdefault("permissions", {}).setdefault("deny", [])
@@ -334,8 +353,10 @@ def check_target(target):
         raise InstallError(f"找不到 {TPL}。請在下載下來的 template 資料夾裡執行 install.py，不要只複製這支檔案。")
 
 
-def install(target, session_log, dry_run, protect=()):
+def install(target, session_log, dry_run, protect=(), todo=False):
     check_target(target)
+    if todo and not TODO_SRC.is_dir():
+        raise InstallError(f"找不到 {TODO_SRC}。請在下載下來的 template 資料夾裡執行 install.py，不要只複製這支檔案。")
     found = plugin_enabled_in(target)
     if found:
         raise InstallError(f"{found} 已經啟用 {PLUGIN_NAME} plugin，同一個專案再用 install.py 裝，"
@@ -362,7 +383,7 @@ def install(target, session_log, dry_run, protect=()):
     print(f"hook 用的 Python 指令：{py}")
 
     # 1. 檔案
-    files = CORE_FILES + (SESSION_LOG_FILES if session_log else [])
+    files = CORE_FILES + (SESSION_LOG_FILES if session_log else []) + (TODO_FILES if todo else [])
     counts = {"new": 0, "replace": 0, "same": 0}
     for rel in LEGACY_FILES:
         if (target / rel).exists():
@@ -371,7 +392,7 @@ def install(target, session_log, dry_run, protect=()):
             if not dry_run:
                 (target / rel).unlink()
     for rel in files:
-        src, dst = TPL / rel, target / rel
+        src, dst = (TODO_SRC / Path(rel).name if rel in TODO_FILES else TPL / rel), target / rel
         if dst.exists():
             if dst.read_bytes() == src.read_bytes():
                 counts["same"] += 1
@@ -385,9 +406,12 @@ def install(target, session_log, dry_run, protect=()):
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
     plan.say(f"複製檔案到 .claude/：新增 {counts['new']}、覆蓋 {counts['replace']}、內容相同略過 {counts['same']}")
+    if todo:
+        plan.say("todo：複製 " + "、".join(TODO_FILES) + "；settings 加開場清單（SessionStart 跑 todo_core.py render）"
+                 "與 TODO 格式檢查（PostToolUse 跑 todo_lint.py）；要有 todo.config.json 才會列出清單，見 README")
 
     # 2. settings.json
-    new = merged_settings(current, session_log, py, rules)
+    new = merged_settings(current, session_log, py, rules, todo)
     old_deny = current.get("permissions", {}).get("deny", [])
     for r in rules:
         plan.say(f"保護規則：{r}" + ("（已經有了）" if r in old_deny else "（Claude 不能改這裡的檔案）"))
@@ -448,9 +472,12 @@ def install(target, session_log, dry_run, protect=()):
     if in_git:
         gi = target / ".gitignore"
         existing = read_text(gi).splitlines() if gi.exists() else []
-        missing = [l for l in GITIGNORE_LINES if l not in existing]
+        missing = [l for l in GITIGNORE_LINES + (GITIGNORE_TODO if todo else []) if l not in existing]
         if missing:
-            plan.say(f".gitignore：加上 {len(missing)} 行 hook 狀態檔")
+            if gi.exists():
+                plan.backup(gi)
+            plan.say(f".gitignore：加上 {len(missing)} 行（hook 產生的本機狀態檔與安裝備份資料夾）"
+                     + ("，舊檔先備份" if gi.exists() else ""))
             if not dry_run:
                 text = read_text(gi) if gi.exists() else ""
                 if text and not text.endswith("\n"):
@@ -467,7 +494,7 @@ def install(target, session_log, dry_run, protect=()):
     if plan.backed_up:
         print(f"備份在：{plan.backup_dir.relative_to(target).as_posix()}/")
     print("安裝完成。接下來：")
-    steps = [f"在專案資料夾跑 {py} .claude/hooks/tests/run_tests.py ，最後一行像「31/31 通過」，前後數字一樣就是全過"]
+    steps = [f"在專案資料夾跑 {py} .claude/hooks/tests/run_tests.py ，最後一行是「N/N 通過」，前後數字一樣就是全過"]
     if cmd is None:
         steps.append("打開 CLAUDE.md，把【】填完（也可以請 Claude 一題一題問你）")
     if rules:
@@ -487,6 +514,11 @@ def uninstall(target, dry_run):
     plan = Plan(target, dry_run)
     print(f"專案資料夾：{target}")
 
+    backup_root = target / ".claude" / "backup"
+    # 之前（安裝、重裝）留下的備份，舊的在前。移除時拿來還原 settings.json 的原排版、指出原檔在哪
+    old_backups = sorted(d for d in backup_root.glob("workflow-template-*") if d.is_dir()) \
+        if backup_root.is_dir() else []
+
     if settings_path.exists():
         new = json.loads(json.dumps(current))
         if "hooks" in new:
@@ -495,14 +527,37 @@ def uninstall(target, dry_run):
                 del new["hooks"]
         if new != current:
             plan.backup(settings_path)
-            plan.say(".claude/settings.json：拿掉這個 template 的 hook，其他設定保留")
-            if not dry_run:
-                write_text(settings_path, dump_settings(new), newline_of(settings_path))
+            original = None  # 安裝前那份 settings.json：內容跟拿掉 hook 後一樣，就原樣寫回，排版不變
+            for d in old_backups:
+                b = d / ".claude" / "settings.json"
+                try:
+                    if b.is_file() and json.loads(read_text(b) or "{}") == new:
+                        original = b
+                        break
+                except Exception:
+                    continue
+            had_before = any((d / ".claude" / "settings.json").is_file() for d in old_backups)
+            if original is not None:
+                plan.say(".claude/settings.json：拿掉這個 template 的 hook，還原成安裝前的那份（排版不變）")
+                if not dry_run:
+                    settings_path.write_bytes(original.read_bytes())
+            elif not new and not had_before:
+                plan.say(".claude/settings.json：安裝時新建、拿掉 hook 後是空的，刪掉（先備份）")
+                if not dry_run:
+                    settings_path.unlink()
+            else:
+                plan.say(".claude/settings.json：拿掉這個 template 的 hook，其他設定保留（會重新排版成縮排 2 格）")
+                if not dry_run:
+                    write_text(settings_path, dump_settings(new), newline_of(settings_path))
 
-    moved = 0
-    for rel in CORE_FILES + SESSION_LOG_FILES + LEGACY_FILES:
+    moved, earlier = 0, []
+    for rel in CORE_FILES + SESSION_LOG_FILES + TODO_FILES + LEGACY_FILES:
         p = target / rel
         if p.exists():
+            for d in old_backups:
+                if (d / rel).is_file():
+                    earlier.append((d / rel).relative_to(target).as_posix())
+                    break
             plan.backup(p)
             moved += 1
             if not dry_run:
@@ -510,43 +565,102 @@ def uninstall(target, dry_run):
     plan.say(f"移除 .claude/ 裡這個 template 的檔案 {moved} 個（先備份）")
     for rel in STATE_PATHS:
         p = target / rel
-        if p.exists() and not dry_run:
-            shutil.rmtree(p) if p.is_dir() else p.unlink()
+        if p.exists():
+            if rel in STATE_BACKUP:
+                plan.backup(p)
+                plan.say(f"{rel}：擋下派工的紀錄，刪掉（先備份）")
+            if not dry_run:
+                shutil.rmtree(p) if p.is_dir() else p.unlink()
     if not dry_run:
         for rel in (".claude/hooks/tests", ".claude/hooks", ".claude/skills/dispatch-template",
-                    ".claude/skills", ".claude/agents", ".claude/rules", ".claude/session-log-kit"):
+                    ".claude/skills", ".claude/agents", ".claude/rules", ".claude/session-log-kit",
+                    ".claude/todo"):
             p = target / rel
             if p.is_dir() and not any(p.iterdir()):
                 p.rmdir()
 
+    # CLAUDE.md、session_log.md、TODO.md：還是安裝時建的範本（沒改過）就刪，改過就留著
     cmd = find_claude_md(target)
     if cmd is not None:
         text = read_text(cmd)
         stripped = remove_block(text)
-        if stripped != text:
+        rel = cmd.relative_to(target).as_posix()
+        if cmd == target / "CLAUDE.md" and is_untouched_claude_md(stripped):
             plan.backup(cmd)
-            plan.say(f"{cmd.relative_to(target).as_posix()}：拿掉接力說明那段，其他內容不動")
+            plan.say("CLAUDE.md：還是安裝時建的範本、沒填過，刪掉（先備份）")
+            if not dry_run:
+                cmd.unlink()
+        elif stripped != text:
+            plan.backup(cmd)
+            plan.say(f"{rel}：拿掉接力說明那段，其他內容不動")
             if not dry_run:
                 write_text(cmd, stripped, newline_of(cmd))
+    kept_files = []
+    for name in ("session_log.md", "TODO.md"):
+        p = target / name
+        if not p.is_file():
+            continue
+        if same_text(read_text(p), read_text(TPL / (name + ".template"))):
+            plan.backup(p)
+            plan.say(f"{name}：還是安裝時建的範本、沒寫過，刪掉（先備份）")
+            if not dry_run:
+                p.unlink()
+        else:
+            kept_files.append(name)
+    if (target / "CLAUDE.md").is_file():
+        kept_files.insert(0, "CLAUDE.md")
 
+    # .gitignore：拿掉 hook 狀態那幾行；備份資料夾還在的話，保留標題和 .claude/backup/，免得備份被 git add 收進去
     gi = target / ".gitignore"
     if gi.exists():
         lines = read_text(gi).splitlines()
-        kept = [l for l in lines if l not in GITIGNORE_LINES and l != GITIGNORE_HEADER]
-        if kept != lines:
-            plan.say(".gitignore：拿掉安裝時加的幾行")
-            if not dry_run:
-                write_text(gi, "\n".join(kept).rstrip("\n") + "\n", newline_of(gi))
+        state_lines = [l for l in GITIGNORE_LINES + GITIGNORE_TODO if l != GITIGNORE_BACKUP]
+        rest = [l for l in lines if l not in state_lines]
+        user_lines = [l for l in rest if l not in (GITIGNORE_BACKUP, GITIGNORE_HEADER) and l.strip()]
+        backups_exist = plan.backed_up or bool(old_backups) or (dry_run and moved > 0)
+        if not backups_exist and not user_lines:
+            if lines:
+                plan.say(".gitignore：裡面只剩安裝時加的幾行，刪掉")
+                if not dry_run:
+                    gi.unlink()
+        else:
+            kept = rest if backups_exist else [l for l in rest if l not in (GITIGNORE_BACKUP, GITIGNORE_HEADER)]
+            if kept != lines:
+                plan.backup(gi)
+                plan.say(".gitignore：拿掉 hook 狀態檔那幾行（舊檔先備份）"
+                         + ("；.claude/backup/ 那行留著，備份資料夾刪掉後再自己拿掉" if backups_exist else ""))
+                if not dry_run:
+                    write_text(gi, "\n".join(kept).rstrip("\n") + "\n", newline_of(gi))
 
     print()
     if dry_run:
         print("預演結束，沒有動任何檔案。")
         return
-    print("移除完成。CLAUDE.md、session_log.md、TODO.md 是你的內容，沒有刪；不需要的話自己刪。")
+    print("移除完成。")
+    if kept_files:
+        print(f"{'、'.join(kept_files)} 你改過，是你的內容，沒有刪；不需要的話自己刪。")
     if current.get("permissions", {}).get("deny"):
         print("settings.json 的 permissions.deny（保護規則）沒有動，原始資料繼續受保護；不需要的話自己刪。")
+    if earlier:
+        print("下面這些檔案在之前的備份裡有舊版。可能是你安裝前就有的同名檔，也可能是這個 template 的舊版；"
+              "要放回去的話自己從這裡複製回原位置：")
+        for e in earlier:
+            print(f"  {e}")
     if plan.backed_up:
-        print(f"備份在：{plan.backup_dir.relative_to(target).as_posix()}/（確定不要了可以整個刪掉）")
+        gi_note = ""
+        if gi.is_file() and GITIGNORE_BACKUP in read_text(gi).splitlines():
+            gi_note = "，.gitignore 裡的 .claude/backup/ 那兩行也可以一起拿掉"
+        print(f"備份在：{plan.backup_dir.relative_to(target).as_posix()}/（確定不要了可以整個刪掉{gi_note}）")
+
+
+def same_text(a, b):
+    return a.replace("\r\n", "\n").strip("\n") == b.replace("\r\n", "\n").strip("\n")
+
+
+def is_untouched_claude_md(text):
+    """拿掉接力說明後，內容還是安裝時建的範本（可能帶 @AGENTS.md 開頭）。"""
+    body = read_text(TPL / "CLAUDE.md.template")
+    return same_text(text, body) or same_text(text, "@AGENTS.md\n\n" + body)
 
 
 def main(argv=None):
@@ -560,10 +674,14 @@ def main(argv=None):
     g.add_argument("--uninstall", action="store_true", help="移除這個 template 裝進去的東西")
     ap.add_argument("--protect", action="append", default=[], metavar="路徑",
                     help="不讓 Claude 修改的資料夾或檔案（例：pdf、data/問卷原始檔.csv），可以給好幾次")
+    ap.add_argument("--todo", action="store_true",
+                    help="另外裝 todo：開場列出待辦清單、改到 TODO 檔時檢查格式（要自己寫 todo.config.json，見 README）")
     ap.add_argument("--dry-run", action="store_true", help="只列出會做什麼，不動任何檔案")
     a = ap.parse_args(argv)
     if a.uninstall and a.protect:
         ap.error("--protect 只能在安裝時用")
+    if a.uninstall and a.todo:
+        ap.error("--todo 只能在安裝時用；--uninstall 會一併移除 todo")
     if sys.version_info[:2] < MIN_PY:
         print(f"需要 Python {MIN_PY[0]}.{MIN_PY[1]} 以上，你現在用的是 {sys.version.split()[0]}。", file=sys.stderr)
         return 1
@@ -572,7 +690,7 @@ def main(argv=None):
         if a.uninstall:
             uninstall(target, a.dry_run)
         else:
-            install(target, a.session_log, a.dry_run, a.protect)
+            install(target, a.session_log, a.dry_run, a.protect, a.todo)
     except InstallError as e:
         print("沒有完成：" + str(e), file=sys.stderr)
         return 1

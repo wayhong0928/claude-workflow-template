@@ -33,7 +33,7 @@ HERE = Path(__file__).resolve().parent
 
 HOOK_FILES = [
     "hook_state.py", "gate_flags.py", "dispatch_gate.py", "skill_gate_flag_writer.py",
-    "context_guard.py", "ctrl_char_stop.py",
+    "context_guard.py", "ctrl_char_stop.py", "compact_flag_reset.py",
 ]
 STATE_NAMES = ("gate_trial.log", "ctrl_char_stop_state.json", "context_guard_state.json")
 
@@ -115,7 +115,7 @@ class Sandbox:
             r.stderr.decode("utf-8", errors="replace").strip()
 
     def transcript(self, records):
-        # compact separators, like real transcripts (gate_flags looks for "subtype":"compact_boundary")
+        # compact separators, like real transcripts
         p = self.work / f"t{time.time_ns()}.jsonl"
         p.write_text("\n".join(json.dumps(r, ensure_ascii=False, separators=(",", ":"))
                                for r in records), encoding="utf-8")
@@ -172,6 +172,14 @@ def agent_payload(sb, sid, subagent="general-purpose", tp=None, tool="Agent"):
     return p
 
 
+def compact_payload(sid, trigger, agent_id=None):
+    p = {"hook_event_name": "PostCompact", "session_id": sid, "trigger": trigger,
+         "compact_summary": "摘要"}
+    if agent_id:
+        p["agent_id"] = agent_id
+    return p
+
+
 def test_dispatch_gate(sb):
     rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sb.sid()))
     check("dispatch_gate: 未叫用 dispatch-template -> 擋", rc == 0 and decision(out) == "deny", out[:100])
@@ -184,16 +192,24 @@ def test_dispatch_gate(sb):
     rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sb.sid(), tool="Bash"))
     check("dispatch_gate: 不是 Agent 工具 -> 放", rc == 0 and out == "", out[:100])
 
-    now = datetime.now()
-    compact = {"type": "system", "subtype": "compact_boundary", "timestamp": iso(now - timedelta(seconds=60))}
-    sid = sb.sid()
-    sb.flag(sid, "dispatch-template", age_s=120)  # flag older than the compact
-    tp = sb.transcript([user_rec(now - timedelta(seconds=300)), compact])
-    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid, tp=tp))
+    # compact：PostCompact hook 刪掉該 session 的 flag，閘門只看 flag 在不在（不讀 transcript）
+    sid, other = sb.sid(), sb.sid()
+    sb.flag(sid, "dispatch-template")
+    sb.flag(other, "dispatch-template")
+    rc, out, err = sb.run("compact_flag_reset.py", compact_payload(sid, "auto"))
+    check("compact_flag_reset: PostCompact -> 刪掉這個 session 的 flag",
+          rc == 0 and out == "" and not sb.flag_path(sid, "dispatch-template").exists(), out[:100] + err[:100])
+    check("compact_flag_reset: 別的 session 的 flag 留著", sb.flag_path(other, "dispatch-template").is_file())
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid))
     check("dispatch_gate: 叫用後發生 compact -> 擋", rc == 0 and decision(out) == "deny", out[:100])
-    sb.flag(sid, "dispatch-template", age_s=0)  # re-invoked after the compact
-    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid, tp=tp))
+    sb.flag(sid, "dispatch-template")  # re-invoked after the compact
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid))
     check("dispatch_gate: compact 後重新叫用 -> 放", rc == 0 and out == "", out[:100])
+    rc, out, _ = sb.run("compact_flag_reset.py", compact_payload(sid, "manual", agent_id="sub-1"))
+    check("compact_flag_reset: subagent 自己 compact -> 主對話的 flag 留著",
+          rc == 0 and sb.flag_path(sid, "dispatch-template").is_file(), out[:100])
+    rc, out, _ = sb.run("compact_flag_reset.py", compact_payload(sb.sid(), "manual"))
+    check("compact_flag_reset: 本來就沒有 flag -> 安靜結束", rc == 0 and out == "", out[:100])
 
 
 def test_flag_writer(sb):
@@ -325,6 +341,12 @@ def test_plugin_data(sb):
     rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sb.sid()), env=envs[0])
     check("plugin: 沒叫用 -> 擋，log 寫進 CLAUDE_PLUGIN_DATA",
           decision(out) == "deny" and len(list(data.rglob("gate_trial.log"))) == 1, out[:100])
+    sb.run("compact_flag_reset.py", compact_payload(sid, "auto"), env=envs[1])
+    check("plugin: 別的專案 compact 不刪這個專案的 flag", len(list(data.rglob(f"{sid}__*.flag"))) == 1)
+    sb.run("compact_flag_reset.py", compact_payload(sid, "auto"), env=envs[0])
+    rc, out, _ = sb.run("dispatch_gate.py", agent_payload(sb, sid), env=envs[0])
+    check("plugin: compact 後 CLAUDE_PLUGIN_DATA 裡的 flag 刪掉 -> 擋",
+          not list(data.rglob(f"{sid}__*.flag")) and decision(out) == "deny", out[:100])
 
     now = datetime.now()
     for i, env in enumerate(envs):
@@ -348,6 +370,19 @@ def test_plugin_data(sb):
           str([p for p in set(before) | set(after) if before.get(p) != after.get(p)]))
 
 
+def test_compile(sb):
+    """把警告當錯誤編譯每支 hook：無效的跳脫序列（如 docstring 裡的 C:\\...）在 Python 3.12 起
+    每次執行都印 SyntaxWarning，未來版本會變成 SyntaxError，hook 又是 fail-open，壞了不會有提示。"""
+    code = "import sys; compile(open(sys.argv[1], encoding='utf-8').read(), sys.argv[1], 'exec')"
+    bad = []
+    for name in HOOK_FILES:
+        r = subprocess.run([sys.executable, "-W", "error", "-c", code, str(sb.hooks / name)],
+                           capture_output=True, timeout=60)
+        if r.returncode != 0:
+            bad.append(name + ": " + r.stderr.decode("utf-8", errors="replace").strip().splitlines()[-1])
+    check("編譯: 每支 hook 把警告當錯誤也編譯得過", not bad, "; ".join(bad))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hooks-dir", type=Path, default=HERE.parent)
@@ -363,7 +398,8 @@ def main():
     before = fingerprint(hooks_dir)
     sb = Sandbox(hooks_dir, overrides)
     try:
-        for fn in (test_dispatch_gate, test_flag_writer, test_context_guard, test_ctrl_char, test_plugin_data):
+        for fn in (test_compile, test_dispatch_gate, test_flag_writer, test_context_guard, test_ctrl_char,
+                   test_plugin_data):
             fn(sb)
         # the sandbox, not the source hooks dir, must have received the block log
         log = sb.hooks / "gate_trial.log"

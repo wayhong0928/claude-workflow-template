@@ -74,6 +74,20 @@
         ]
       }
     ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${user_config.python}",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/template/.claude/hooks/compact_flag_reset.py"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [

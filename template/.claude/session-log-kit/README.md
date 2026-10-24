@@ -1,6 +1,6 @@
 # session_log：跨 session 接力
 
-Claude Code 每開一個新 session 都不記得上次做到哪。這個套件讓開場自動帶入上次的紀錄，收尾時用固定格式補一筆。三支都是 Python，只用標準函式庫，Windows、macOS、Linux 都能跑。
+Claude Code 每開一個新 session 都不記得上次做到哪。這個套件讓開場自動帶入上次的紀錄，收尾時用固定格式補一筆。三支都是 Python，只用標準函式庫，在 Windows 和 WSL2（Ubuntu）上跑過測試，macOS 沒測過。
 
 - `sessionstart_log.py`：開場時由 hook 執行，把 `session_log.md` 最新幾筆注入給 Claude。
 - `add_session_log.py`：把一筆新紀錄插到 `session_log.md` 最上面，並檢查格式。

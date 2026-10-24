@@ -62,5 +62,17 @@
         }
       ]
     }
+  ],
+  "PostCompact": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "python",
+          "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/compact_flag_reset.py"],
+          "timeout": 10
+        }
+      ]
+    }
   ]
 }
