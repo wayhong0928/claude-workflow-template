@@ -53,6 +53,7 @@ h2 { font-size: 1.3rem; margin: 48px 0 12px; padding-top: 8px; border-top: 1px s
 p { margin: 0 0 12px; }
 a { color: var(--accent); }
 code { background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 0.92em; overflow-wrap: anywhere; }
+pre.prompt { background: var(--code-bg); padding: 12px 14px; border-radius: 6px; font-size: 0.88em; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 12px; }
 .lead { color: var(--muted); font-size: 1.05rem; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 0; }
 .btn {
@@ -226,9 +227,15 @@ header h1 { padding-right: 44px; }
 <section>
   <h2>開始使用</h2>
   <ol>
-    <li><strong>確認環境</strong>：Claude Code 2.1.292 以上、Python 3.8 以上。裝 session_log 還要 PowerShell（Windows 內建；macOS、Linux、WSL 要另外裝 PowerShell 7）。Git 不是必要的。檢查方法見 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">README 的環境表</a>。</li>
-    <li><strong>讓 AI 幫你裝</strong>：在你的專案資料夾開 Claude Code 或 Codex，貼上 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝方法一讓-ai-幫你裝建議">README 裡的安裝 prompt</a>。它會先檢查環境，缺什麼先問你，每一步等你同意才做。用 Codex 裝也可以，但裝好的東西只在 Claude Code 裡有作用。</li>
-    <li><strong>或自己裝</strong>：下載 ZIP 解壓縮，執行 <code>python install.py 你的專案資料夾 --dry-run</code>（macOS、Linux、WSL 用 <code>python3</code>）看它要做什麼，沒問題再拿掉 <code>--dry-run</code>。原本的設定會保留，改動前先備份；不要了可以用 <code>--uninstall</code> 移除。</li>
+    <li><strong>確認環境</strong>：Claude Code 2.1.292 以上、Python 3.8 以上，不需要 PowerShell，Git 也不是必要的。檢查方法見 <a href="https://github.com/wayhong0928/claude-workflow-template#安裝前確認環境">README 的環境表</a>。</li>
+    <li><strong>讓 AI 幫你裝成 plugin</strong>：在你的專案資料夾開 Claude Code，貼上下面這段。每一步它都會先說要跑什麼，等你同意才做。
+<pre class="prompt">請幫我在目前這個資料夾裝 workflow-kit（https://github.com/wayhong0928/claude-workflow-template）。每一步先說要跑什麼指令，等我同意再做。
+1. 檢查 claude --version 要 2.1.292 以上；Python 依序試 python、python3、py（py 只在 Windows 試），要 3.8 以上，Windows 上跳出 Microsoft Store 或印出 "Python was not found" 算沒有。缺哪個就停下來告訴我怎麼裝。
+2. 跑 claude plugin marketplace add wayhong0928/claude-workflow-template
+3. 跑 claude plugin install workflow-kit@workflow-kit --scope project --config python=&lt;第 1 步找到的 Python 指令&gt;
+4. 請我關掉 Claude Code、在同一個資料夾重開，再打 /workflow-kit:setup，照它的問題一題一題回答。</pre>
+    setup 寫進 <code>.claude/</code> 的檔，Claude Code 會先問你要不要允許，這是正常的。</li>
+    <li><strong>公司電腦擋外部套件來源時</strong>：管理員可以限制只能從核准的來源裝 plugin，這時上面第 2 步會失敗。改用 <a href="https://github.com/wayhong0928/claude-workflow-template#備用用-installpy-裝">README 的備用裝法</a>，用 <code>install.py</code> 把檔案複製進你的專案，原本的設定會保留，改動前先備份，不要了可以用 <code>--uninstall</code> 移除。</li>
   </ol>
   <p>適合以寫作、研究為主、一個專案會跨很多 session 的人。Windows 原生在實機上跑過；WSL2（Ubuntu）跑過 hook 與安裝程式的測試；macOS 還沒測。用 WSL 的話，Claude Code 和安裝程式都在 WSL 裡跑。</p>
 </section>

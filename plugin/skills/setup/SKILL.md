@@ -14,6 +14,8 @@ plugin 帶得了 hook、skill、agent，帶不了規則檔、CLAUDE.md、`permis
 - hook 用的 Python 指令：`${user_config.python}`
 - 專案資料夾：目前的工作資料夾（下面寫「專案」都指它）
 
+寫 `.claude/` 底下的檔時，Claude Code 一定會跳出權限詢問，自動接受編輯的模式也一樣。先跟使用者說這是正常的，請使用者按允許。被拒絕的話不要改用指令繞過，在收尾時列出沒寫成的檔和它該有的內容。
+
 ## 1. 先檢查能不能裝
 
 逐項檢查，任一項不過就停下來，告訴使用者原因和怎麼處理，不往下做。
@@ -24,7 +26,7 @@ plugin 帶得了 hook、skill、agent，帶不了規則檔、CLAUDE.md、`permis
 
 ## 2. CLAUDE.md
 
-- 專案沒有 `CLAUDE.md`（也沒有 `.claude/CLAUDE.md`）：讀 `${CLAUDE_PLUGIN_ROOT}/template/CLAUDE.md.template`，裡面每個【】一次問一題，用使用者的回答填。使用者說「先跳過」的就留著【】。範本裡提到 install.py 的 `--protect`，在這條裝法改寫成「第 4 步寫進 `.claude/settings.json` 的 `permissions.deny`」。專案已有 `AGENTS.md` 時，CLAUDE.md 第一行寫 `@AGENTS.md`，因為有了 CLAUDE.md，Claude Code 就不再自動讀 AGENTS.md。
+- 專案沒有 `CLAUDE.md`（也沒有 `.claude/CLAUDE.md`）：讀 `${CLAUDE_PLUGIN_ROOT}/template/CLAUDE.md.template`，裡面每個【】一次問一題，用使用者的回答填。使用者說「先跳過」的就留著【】。範本裡寫「已用 `permissions.deny` 鎖住」的句子，等第 4 步真的寫進 `.claude/settings.json` 之後才保留；使用者不鎖或沒寫成，就把那幾句刪掉，不要留下不實的說明。專案已有 `AGENTS.md` 時，CLAUDE.md 第一行寫 `@AGENTS.md`，因為有了 CLAUDE.md，Claude Code 就不再自動讀 AGENTS.md。
 - 已經有 CLAUDE.md：不覆蓋。把範本有、現有檔沒有的段落列給使用者，問要不要補，補的話加在結尾。
 
 不論新建或既有，結尾都加這段接力說明（已經有 `claude-workflow-template:start` 標記就不重複加）：
@@ -68,9 +70,9 @@ plugin 帶得了 hook、skill、agent，帶不了規則檔、CLAUDE.md、`permis
 
 接著問要列哪些專案（名稱與 TODO 檔的路徑），照 todo plugin README 的格式寫 `todo.config.json`，寫之前一樣先列出內容等使用者同意。
 
-## 6. statusLine（只給片段）
+## 6. 狀態列（只告訴使用者怎麼做）
 
-plugin 不能改主 statusLine，所以這步只印出設定片段，請使用者自己決定要不要貼進 `.claude/settings.json`。不要替使用者寫入。片段與說明見 README「狀態列」一節。
+plugin 不能改底部狀態列，狀態列又是使用者的全域設定，所以這步不替使用者寫。只告訴使用者：想在底部看到模型和 context 用了多少，可以自己打 `/statusline 顯示模型名稱和 context 用量百分比`，Claude Code 會在 `~/.claude/` 產生腳本並改設定，過程中會問要不要允許。不要就跳過。
 
 ## 7. 收尾
 

@@ -20,7 +20,7 @@ Intro page (Chinese): <https://wayhong0928.github.io/claude-workflow-template/>
 
 - You use Claude Code (the terminal version), and your project spans many sessions.
 - Your project is mostly writing and research: theses, literature notes, reports. Code projects work too, but for pure programming a package like [Superpowers](https://github.com/obra/superpowers) is a better fit (comparison, in Chinese: [docs/vs-superpowers.md](docs/vs-superpowers.md)).
-- Platforms: run on real hardware on native Windows; the hook and installer tests pass on WSL2 (Ubuntu); macOS has only had static checks. Hooks are Python. The session_log startup injection uses PowerShell, so macOS, Linux, and WSL need PowerShell 7 (`pwsh`) installed.
+- Platforms: run on real hardware on native Windows; the hook and installer tests pass on WSL2 (Ubuntu); macOS has only had static checks. The hooks and session_log scripts are all Python; PowerShell is not needed.
 
 You don't need to know Git. To undo damage, see [Undoing a bad change](#undoing-a-bad-change).
 
@@ -29,17 +29,41 @@ You don't need to know Git. To undo damage, see [Undoing a bad change](#undoing-
 | Tool | What it's for | Required? | How to check | If you don't have it |
 |---|---|---|---|---|
 | Claude Code 2.1.292 or later | This setup is built for it | Yes | `claude --version` | Install per the [official guide](https://code.claude.com/docs/en/setup). To update: native install `claude update`; WinGet `winget upgrade Anthropic.ClaudeCode`; Homebrew `brew upgrade claude-code` |
-| Python 3.8 or later | All hooks and the installer | Yes | Windows: `python --version` (or `py --version`); macOS, Linux, WSL: `python3 --version` | Windows: `winget install Python.Python.3.12`; macOS: `brew install python`; Ubuntu/WSL: `sudo apt install python3` |
-| PowerShell | session_log startup injection | Only if you install session_log | Built into Windows; macOS, Linux, WSL: `pwsh --version` | macOS: `brew install powershell`; Linux/WSL: follow [Microsoft's Linux install guide](https://learn.microsoft.com/powershell/scripting/install/install-powershell-on-linux); or skip session_log |
-| Git | Downloading this template | No | `git --version` | Download the ZIP instead |
+| Python 3.8 or later | All hooks, the session_log scripts, and the installer | Yes | Windows: `python --version` (or `py --version`); macOS, Linux, WSL: `python3 --version` | Windows: `winget install Python.Python.3.12`; macOS: `brew install python`; Ubuntu/WSL: `sudo apt install python3` |
+| Git | Downloading this template for the fallback install | No | `git --version` | Download the ZIP instead |
 
 On Windows, if typing `python` opens the Microsoft Store, Python isn't installed yet; that's just a built-in shortcut.
 
-**If you use WSL**: run Claude Code, Python, and install.py all inside WSL, and keep the project on the WSL side. The installer writes the Python and PowerShell command names of the current environment into `.claude/settings.json`, so a setup installed in WSL breaks when used from native Windows Claude Code, and the other way round (see [Known limitations](#known-limitations)).
+**If you use WSL**: run Claude Code and Python inside WSL, and keep the project on the WSL side. The Python command name the hooks use is set for the current environment, so a setup installed in WSL breaks when used from native Windows Claude Code, and the other way round (see [Known limitations](#known-limitations)).
 
-## Install option 1: let an AI install it (recommended)
+## Install: let an AI install it as a plugin (recommended)
 
-Open Claude Code or Codex in **your project folder** (open a terminal there and type `claude` or `codex`) and paste in the whole block below. It checks your environment first, asks before installing anything missing, and waits for your OK at every step.
+Open Claude Code in **your project folder** (open a terminal there and type `claude`) and paste in the whole block below. Before each step it tells you what it will run and waits for your OK.
+
+```text
+Please install workflow-kit (https://github.com/wayhong0928/claude-workflow-template) in the current folder. Before each step, tell me which command you will run and wait for my OK.
+1. Check that claude --version is 2.1.292 or later; for Python, try python, python3, py in that order (py only on Windows), needs 3.8 or later; on Windows, if the Microsoft Store opens or it prints "Python was not found", count it as missing. If anything is missing, stop and tell me how to install it.
+2. Run claude plugin marketplace add wayhong0928/claude-workflow-template
+3. Run claude plugin install workflow-kit@workflow-kit --scope project --config python=<the Python command found in step 1>
+4. Ask me to quit Claude Code, reopen it in the same folder, and type /workflow-kit:setup, then answer its questions one at a time. The setup skill is written in Traditional Chinese; ask me its questions in English and write my answers in English.
+```
+
+`--scope project` enables it only in this folder; other projects aren't affected. Always pass `--config python=`: without it, none of the hooks run. Setup creates `CLAUDE.md`, `session_log.md`, `TODO.md`, and the dispatch rules file, and asks which folders to lock. When it writes files under `.claude/`, Claude Code asks for your permission first; that's expected.
+
+**Check this yourself afterwards**: restart `claude` and type `/hooks`. You should see workflow-kit's 6 hooks (`PreToolUse`, `PostToolUse`, `UserPromptExpansion`, `UserPromptSubmit`, `Stop`, `SessionStart`).
+
+### When a work computer blocks outside plugin sources
+
+On computers managed by a company or school, an administrator can use `strictKnownMarketplaces` to allow plugins only from approved sources (official docs: [plugins/org](https://code.claude.com/docs/en/plugins/org#restrict-what-users-can-install)), and step 2 will fail. Use the fallback install below instead: it only copies files into your project and doesn't go through the plugin system. If your employer forbids downloading outside code, ask IT before installing.
+
+### Updating
+
+- Plugin: run `claude plugin marketplace update workflow-kit`, then `claude plugin update workflow-kit@workflow-kit`, and restart Claude Code. The hooks, skills, and verifier switch to the new version. The `.claude/rules/dispatch-and-verify.md` that setup copied into your project doesn't change; to update it, ask Claude to compare it with the new version and decide.
+- Fallback install: download the new version and run install.py again as below; it backs up before overwriting.
+
+## Fallback: install with install.py
+
+Use this when a work computer can't install plugins, or when you want every file inside your project to manage yourself. Open Claude Code or Codex in **your project folder** (type `claude` or `codex`) and paste in the whole block below. It checks your environment first, asks before installing anything missing, and waits for your OK at every step. Don't run this in a project that already has the plugin; install.py detects it and stops.
 
 Codex can do the install, but what gets installed only works in Claude Code: Codex reads `AGENTS.md`, `.agents/skills/`, and `.codex/hooks.json`, not `.claude/`. Codex's default sandbox has no network access and can only write to the current folder, so it will ask you to approve the download of the template into a temp folder.
 
@@ -51,20 +75,19 @@ Please install claude-workflow-template (https://github.com/wayhong0928/claude-w
    - Claude Code: claude --version, needs 2.1.292 or later.
    - Python: try python, python3, py in that order (py only on Windows), needs 3.8 or later. On Windows, if the Microsoft Store opens or it prints "Python was not found", count it as missing.
    - Git: git --version.
-   - If not on Windows, also check pwsh --version.
 2. If Python is missing or Claude Code is too old: stop, tell me how to install or update it (Python: winget install Python.Python.3.12 on Windows, brew install python on macOS, sudo apt install python3 on Ubuntu/WSL; Claude Code depends on how it was installed: claude update for a native install, winget upgrade Anthropic.ClaudeCode for WinGet, brew upgrade claude-code for Homebrew), and ask whether to do it now. If I say no, stop here.
 3. If Git is missing: ask whether to install it (Windows: winget install Git.Git; macOS: xcode-select --install; Ubuntu/WSL: sudo apt install git). If I say no, that's fine; download the ZIP in the next step instead.
 4. Download the template into a temp folder, not into my project. With Git, use git clone --depth 1; without it, download https://github.com/wayhong0928/claude-workflow-template/archive/refs/heads/main.zip and unzip it.
-5. Ask whether I want session_log (each session automatically picks up the previous one; it adds session_log.md and TODO.md to the project). Give me a one-line recommendation: if this folder is not a git repo (for example a thesis folder or an Obsidian vault), recommend it; if it's a code repo, it can be skipped. If this isn't Windows and pwsh is missing, it can't be installed. Then ask whether there is raw data you must not change (PDFs, raw survey files, submitted documents), and if so, list the folders or files.
+5. Ask whether I want session_log (each session automatically picks up the previous one; it adds session_log.md and TODO.md to the project). Give me a one-line recommendation: if this folder is not a git repo (for example a thesis folder or an Obsidian vault), recommend it; if it's a code repo, it can be skipped. Then ask whether there is raw data you must not change (PDFs, raw survey files, submitted documents), and if so, list the folders or files.
 6. Dry run first: python <temp folder>/install.py <my project folder> --dry-run, plus --session-log or --no-session-log; for each raw-data path from step 5, add --protect <path>. Walk me through the actions it lists; once I agree, run it again without --dry-run. Replace python with the one you found in step 1.
-7. In my project folder, run python .claude/hooks/tests/run_tests.py (again with the python from step 1). The last line should read "25/25 通過" ("通過" means passed; matching numbers mean everything passed). If it doesn't pass, paste the output to me and don't modify the hooks yourself.
+7. In my project folder, run python .claude/hooks/tests/run_tests.py (again with the python from step 1). The last line should read "31/31 通過" ("通過" means passed; matching numbers mean everything passed). If it doesn't pass, paste the output to me and don't modify the hooks yourself.
 8. If install.py says it created a new CLAUDE.md: the file is in Traditional Chinese. Ask me one question at a time to fill in the 【】 placeholders, explaining each line in English and writing my answers in English; delete any line I can't answer.
 9. Delete the temp folder. Report what was installed, what already existed, where the backup is, and which steps failed or were skipped by me. Finally, remind me to quit Claude Code, type claude again in the project folder, and type /hooks to confirm.
 ```
 
 **After the AI finishes, check this yourself**: in the project folder, start `claude` again and type `/hooks`. You should see five event types: `PreToolUse`, `PostToolUse`, `UserPromptExpansion`, `UserPromptSubmit`, `Stop` (plus `SessionStart` if you installed session_log).
 
-## Install option 2: install it yourself
+### Without an AI: run install.py yourself
 
 The commands below use Windows as the example. On macOS, Linux, and WSL, replace `python` with `python3` and write paths like `~/thesis/notes`.
 
@@ -77,7 +100,7 @@ The commands below use Windows as the example. On macOS, Linux, and WSL, replace
 
    It lists how many files it will add, which files it will overwrite, and which settings it will change, without touching anything. To skip session_log, replace `--session-log` with `--no-session-log`; if you give neither, it decides for you (it installs session_log when the project isn't in a git repo). If you have raw data that must not change, add options like `--protect pdf` (see [Protecting raw data](#protecting-raw-data)).
 3. If it all looks right, run it again without `--dry-run`.
-4. In the terminal, `cd "D:\thesis\notes"` to switch to your project folder and run `python .claude/hooks/tests/run_tests.py`. The last line should read "25/25 通過" ("通過" means passed; matching numbers mean everything passed).
+4. In the terminal, `cd "D:\thesis\notes"` to switch to your project folder and run `python .claude/hooks/tests/run_tests.py`. The last line should read "31/31 通過" ("通過" means passed; matching numbers mean everything passed).
 5. Open `CLAUDE.md` in your project and fill in the 【】 placeholders (if install.py created it).
 6. In the project folder, type `claude`, then `/hooks` to confirm.
 
@@ -187,8 +210,11 @@ For work that touches many files, like revising a whole chapter or tidying a bat
 ## What's in the repo
 
 ```
-install.py                 install and uninstall
-template/                  what gets installed into your project
+.claude-plugin/            plugin and marketplace manifests
+plugin/                    plugin-only hook config and the setup skill
+todo/                      /todo side panel (a second, optional plugin)
+install.py                 fallback install: install and uninstall
+template/                  files shared by both install routes
   .claude/
     hooks/                 four hooks, a shared module, tests
     skills/dispatch-template/  dispatch prompt templates, model selection table
@@ -216,8 +242,8 @@ Starting `claude` inside this repo's folder doesn't enable any hooks. Everything
 - All hooks fail open: on an error they let the action through so they never block you, but you also get no warning when one breaks. Run the tests after changing a hook.
 - `ctrl_char_stop.py` only checks files whose full path appears in the transcript. Paths built from variables inside a command are missed, and on macOS and Linux a path containing spaces is caught only if it's quoted. Files written by a subagent are recorded in a separate transcript and aren't checked either. It blocks at most once per turn.
 - Even the built-in `Explore` and `Plan` subagents need `dispatch-template` loaded before they can be dispatched (only `fork` is exempt), so the first dispatch after entering plan mode may be blocked once; after the template loads, it goes through.
-- Run install.py in the same environment where you run `claude`. settings.json records the command names found on PATH in that environment (often `python` and `powershell` on Windows, `python3` and `pwsh` on macOS and Linux). If the same project folder is opened from both Windows and WSL, or synced between Windows and a Mac through a cloud drive, every hook fails on the other side and the dispatch check stops working with them.
-- What's been tested on real hardware: Claude Code itself only on native Windows; the hook and installer tests on Windows and WSL2 (Ubuntu); the two session_log `.ps1` scripts only on Windows PowerShell 5.1; macOS not yet.
+- The Python command name the hooks use is set for the environment you install in (often `python` on Windows, `python3` on macOS and Linux). The plugin keeps it in `--config python=`, which you can change with `/plugin configure workflow-kit@workflow-kit`; install.py writes it into `.claude/settings.json`. If the same project folder is opened from both Windows and WSL, or synced between Windows and a Mac through a cloud drive, every hook fails on the other side and the dispatch check stops working with them.
+- What's been tested on real hardware: Claude Code itself only on native Windows; the hook and installer tests on Windows and WSL2 (Ubuntu); macOS not yet.
 - `--protect` rules can't block a script that opens a file and writes to it itself (see [Protecting raw data](#protecting-raw-data)). If a path contains `*`, `?`, `[`, or `]`, install.py won't write the rule for you; add it by hand.
 - Claude Code only. Codex can run the install for you, but it doesn't read `.claude/`: rules go in `AGENTS.md`, skills in `.agents/skills/`, hooks in `.codex/hooks.json`. The dispatch check depends on Claude Code's Skill tool events, and the control-character check reads Claude Code's transcript (Codex's official docs say its transcript format is not a stable interface), so these two hooks can't simply be moved over.
 - Everything installed is in Traditional Chinese (see the language note at the top).
