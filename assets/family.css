@@ -1,0 +1,296 @@
+/* 門面頁共用區塊（流程圖與工具卡片）。權威源在 Obsidian vault 的 門面頁\family.css，
+   由 sync_family.py 複製到各站，不要在各站直接改。
+   顏色讀各站自己的色票，兩套命名都接：--ink/--rule/--panel 與 --text/--line/--surface。 */
+
+.fam {
+  --fam-ink: var(--ink, var(--text, #23211d));
+  --fam-soft: var(--ink-soft, var(--muted, #57534a));
+  --fam-line: var(--rule, var(--line, var(--border, #dddddd)));
+  --fam-panel: var(--panel, var(--surface, #ffffff));
+  --fam-acc: var(--accent, #2f5d8a);
+  --fam-acc-soft: var(--accent-soft, var(--surface, #eef2f6));
+  --fam-step: 110ms;
+  margin: 2.5rem 0;
+  color: var(--fam-ink);
+}
+
+.fam h2 { margin: 0 0 .9rem; }
+
+.fam a { color: inherit; }
+
+/* ---- 流程圖 ---- */
+
+.fam-guide {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: .25rem .75rem;
+  padding: .7rem 1rem;
+  margin-bottom: .75rem;
+  border: 1px solid var(--fam-line);
+  border-radius: 10px;
+  background: var(--fam-panel);
+  text-decoration: none;
+}
+
+.fam-guide span { color: var(--fam-soft); font-size: .92rem; }
+
+.fam-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: .9rem;
+  counter-reset: fam;
+}
+
+.fam-stage {
+  position: relative;
+  margin: 0;
+  padding: .75rem .8rem .8rem;
+  border: 1px solid var(--fam-line);
+  border-radius: 10px;
+  background: var(--fam-panel);
+}
+
+.fam-stage > b {
+  display: block;
+  font-size: .98rem;
+}
+
+.fam-stage > b::before {
+  counter-increment: fam;
+  content: counter(fam);
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin-right: .4rem;
+  border-radius: 50%;
+  background: var(--fam-line);
+  color: var(--fam-ink);
+  font-size: .75rem;
+  vertical-align: .08em;
+}
+
+.fam-stage:not(:last-child)::after {
+  content: "→";
+  position: absolute;
+  right: -.8rem;
+  top: 1.05rem;
+  color: var(--fam-soft);
+  font-size: .9rem;
+}
+
+.fam-chip {
+  display: inline-block;
+  margin: .45rem .3rem 0 0;
+  padding: .12rem .55rem;
+  border: 1px solid var(--fam-line);
+  border-radius: 999px;
+  font-size: .82rem;
+  line-height: 1.5;
+  text-decoration: none;
+  background: var(--fam-panel);
+}
+
+a.fam-chip:hover, a.fam-guide:hover { border-color: var(--fam-acc); }
+
+.fam-on {
+  border-color: var(--fam-acc);
+  background: var(--fam-acc-soft);
+}
+
+.fam-on > b::before { background: var(--fam-acc); color: var(--fam-panel); }
+
+.fam-here {
+  border-color: var(--fam-acc);
+  background: var(--fam-acc);
+  color: var(--fam-panel);
+  font-weight: 600;
+}
+
+.fam-tag {
+  display: inline-block;
+  margin-left: .35rem;
+  padding: 0 .4rem;
+  border-radius: 999px;
+  background: var(--fam-acc);
+  color: var(--fam-panel);
+  font-size: .72rem;
+  font-style: normal;
+  font-weight: 600;
+  vertical-align: .1em;
+}
+
+.fam-here .fam-tag { background: var(--fam-panel); color: var(--fam-acc); }
+
+.fam-base {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 .3rem;
+  margin-top: .9rem;
+  padding: .55rem 1rem .7rem;
+  border: 1px dashed var(--fam-line);
+  border-radius: 10px;
+}
+
+.fam-base > b { margin-right: .4rem; font-size: .92rem; }
+
+.fam-base.fam-on { border-style: solid; }
+
+.fam-more { margin: .8rem 0 0; font-size: .95rem; }
+
+.fam-more a { color: var(--fam-acc); }
+
+/* 捲到才依序出現；family.js 只在沒有要求減少動態效果時加 .fam-ready */
+
+.fam-ready .fam-guide,
+.fam-ready .fam-stage,
+.fam-ready .fam-base {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.fam-ready.fam-go .fam-guide,
+.fam-ready.fam-go .fam-stage,
+.fam-ready.fam-go .fam-base {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity .45s ease calc(var(--i, 0) * var(--fam-step)),
+    transform .45s ease calc(var(--i, 0) * var(--fam-step)),
+    border-color .4s ease calc(7 * var(--fam-step)),
+    background-color .4s ease calc(7 * var(--fam-step));
+}
+
+.fam-ready:not(.fam-go) .fam-on {
+  border-color: var(--fam-line);
+  background: var(--fam-panel);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fam-ready .fam-guide,
+  .fam-ready .fam-stage,
+  .fam-ready .fam-base { opacity: 1; transform: none; transition: none; }
+}
+
+/* ---- 工具卡片 ---- */
+
+.fam-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: .8rem;
+}
+
+.fam-card {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  padding: .85rem 1rem .95rem;
+  border: 1px solid var(--fam-line);
+  border-radius: 10px;
+  background: var(--fam-panel);
+  text-decoration: none;
+  transition: border-color .2s ease, transform .2s ease;
+}
+
+a.fam-card:hover { border-color: var(--fam-acc); transform: translateY(-2px); }
+
+.fam-card small { color: var(--fam-soft); font-size: .78rem; }
+
+.fam-card b { font-size: 1rem; }
+
+.fam-card span { color: var(--fam-soft); font-size: .88rem; line-height: 1.6; }
+
+.fam-card.fam-here { color: var(--fam-ink); background: var(--fam-acc-soft); font-weight: inherit; }
+
+.fam-card.fam-here .fam-tag { align-self: flex-start; margin: .2rem 0 0; background: var(--fam-acc); color: var(--fam-panel); }
+
+@media (prefers-reduced-motion: reduce) {
+  a.fam-card:hover { transform: none; }
+}
+
+/* ---- 各站手寫段落共用的版型：你是不是卡在這裡、圖、怎麼裝、限制 ---- */
+
+.fam-pain-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: .8rem;
+}
+
+.fam-pain {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  padding: .85rem 1rem .9rem;
+  border: 1px solid var(--fam-line);
+  border-left: 4px solid var(--fam-acc);
+  border-radius: 10px;
+  background: var(--fam-panel);
+}
+
+.fam-pain > b { font-size: .98rem; }
+
+.fam-pain q { color: var(--fam-soft); font-size: .92rem; quotes: "「" "」"; }
+
+.fam-pain p { margin: 0; font-size: .9rem; line-height: 1.6; }
+
+.fam-pain .fam-go { margin-top: auto; padding-top: .25rem; }
+
+.fam-pain .fam-go { display: flex; flex-wrap: wrap; gap: .35rem; }
+
+.fam-pain .fam-go a {
+  padding: .1rem .55rem;
+  border: 1px solid var(--fam-line);
+  border-radius: 999px;
+  background: var(--fam-acc-soft);
+  font-size: .82rem;
+  text-decoration: none;
+}
+
+.fam-pain .fam-go a:hover { border-color: var(--fam-acc); }
+
+.fam-shot { margin-left: 0; margin-right: 0; }
+
+.fam-shot img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--fam-line);
+  border-radius: 10px;
+}
+
+.fam-shot figcaption { margin-top: .5rem; color: var(--fam-soft); font-size: .88rem; }
+
+.fam-box {
+  padding: .9rem 1.1rem;
+  border: 1px solid var(--fam-line);
+  border-radius: 10px;
+  background: var(--fam-panel);
+}
+
+.fam-box > :first-child { margin-top: 0; }
+
+.fam-box > :last-child { margin-bottom: 0; }
+
+.fam-box pre { overflow-x: auto; }
+
+/* ---- 窄的時候改直排：看流程圖自己的寬度，不看視窗，內頁正文欄比首頁窄 ---- */
+
+.fam-flow { container-type: inline-size; }
+
+.fam-chip { white-space: nowrap; }
+
+@container (max-width: 700px) {
+  .fam-stages { grid-template-columns: 1fr; gap: 1.1rem; }
+  .fam-stage:not(:last-child)::after {
+    content: "↓";
+    right: auto;
+    left: 1.15rem;
+    top: auto;
+    bottom: -1.15rem;
+  }
+}
