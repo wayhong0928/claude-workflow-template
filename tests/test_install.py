@@ -13,6 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INSTALL = ROOT / "install.py"
+# 在 Claude Code session 裡跑時，CLAUDE_PLUGIN_DATA、CLAUDE_PROJECT_DIR 這類變數會讓 hook 把狀態寫到沙箱外，跑 install.py 和 hook 的子行程不帶 CLAUDE* 變數
+BASE_ENV = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
 
 results = []
 
@@ -23,7 +25,7 @@ def check(name, ok, detail=""):
 
 
 def run(target, *args):
-    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+    env = dict(BASE_ENV, PYTHONIOENCODING="utf-8")
     r = subprocess.run([sys.executable, str(INSTALL), str(target), *args],
                        capture_output=True, text=True, encoding="utf-8", env=env)
     return r.returncode, r.stdout + r.stderr
@@ -80,7 +82,7 @@ def main():
               str(sorted(x.name for x in p.iterdir())))
         r = subprocess.run([sys.executable, str(p / ".claude/hooks/tests/run_tests.py")],
                            capture_output=True, text=True, encoding="utf-8",
-                           env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+                           env=dict(BASE_ENV, PYTHONIOENCODING="utf-8"))
         check("裝好的 hook 測試全過", r.returncode == 0, r.stdout[-300:])
 
         # 2. 重跑不重複
@@ -100,7 +102,7 @@ def main():
 
         def kit_run(script, *args):
             r = subprocess.run([sys.executable, str(kit / script), *map(str, args)], capture_output=True,
-                               env=dict(os.environ, CLAUDE_PROJECT_DIR=str(p)))
+                               env=dict(BASE_ENV, CLAUDE_PROJECT_DIR=str(p)))
             return r.returncode, r.stdout.decode("utf-8", errors="replace")
 
         for i, day in enumerate(("2020-01-01", "2020-01-02", "2020-01-03", "2020-01-04", "2020-01-05")):
@@ -342,13 +344,13 @@ def main():
         (p / "session_log.md").write_text("# log\n\n## 2026-10-02 | 舊\n\n**下一步**：\n- 舊的\n\n"
                                           "## 2026-10-03 | 新\n\n**做了什麼**：\n- 新的\n", encoding="utf-8")
         r = subprocess.run([sys.executable, str(kit / "sessionstart_log.py")], capture_output=True,
-                           env=dict(os.environ, CLAUDE_PROJECT_DIR=str(p)))
+                           env=dict(BASE_ENV, CLAUDE_PROJECT_DIR=str(p)))
         ctx = json.loads(r.stdout.decode("utf-8") or "{}").get("hookSpecificOutput", {}).get("additionalContext", "")
         check("開場 hook 先放日期最新的全文、再放舊的標題與下一步",
               0 < ctx.find("## 2026-10-03 | 新") < ctx.find("## 2026-10-02 | 舊") and "- 新的" in ctx and "- 舊的" in ctx,
               ctx[:300])
         r = subprocess.run([sys.executable, str(kit / "sessionstart_log.py")], capture_output=True,
-                           env=dict(os.environ, CLAUDE_PROJECT_DIR=str(base / "no-such-project")))
+                           env=dict(BASE_ENV, CLAUDE_PROJECT_DIR=str(base / "no-such-project")))
         check("沒有 session_log.md 就安靜結束", r.returncode == 0 and r.stdout == b"", r.stdout[:200])
 
         # 15. --todo：選用，開場清單與 TODO 格式檢查（腳本正本在 todo/scripts/，這裡只複製）

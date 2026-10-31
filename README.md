@@ -251,8 +251,9 @@ README.md、README.en.md    說明文件（繁體中文、英文）
 - `rules/` 和 `dispatch-template` 是寫給 Claude 看的規則，它不一定每次都照做；會強制的只有 hook 那幾項。
 - hook 全部 fail-open，出錯時一律放行，不會卡住你，但壞掉時也不會有提示。改了 hook 請跑測試。
 - `ctrl_char_stop.py` 只檢查得到 transcript 裡有完整路徑的檔案。指令裡用變數組出來的路徑會漏掉，macOS、Linux 上含空白的路徑要有引號包住才抓得到。subagent 寫的檔案記在另一份 transcript，也不在檢查範圍。同一回合最多擋 1 次。
-- 連內建的 `Explore`、`Plan` subagent 也要先載入 `dispatch-template` 才能派（只有 `fork` 免檢），所以進 plan mode 後第一次派工可能會被擋一次，載入模板後就會放行。
+- 連內建的 `Explore`、`Plan` subagent 也要先載入 `dispatch-template` 才能派（Agent 工具派的 subagent 裡只有 `fork` 免檢），所以進 plan mode 後第一次派工可能會被擋一次，載入模板後就會放行。
 - `fork` 免檢，也不吃 `model` 參數。fork 帶著主對話的完整 context，用的是主對話的模型。fork mode 預設開啟（終端機互動模式從 2.1.232 起），Claude 可以自己決定開 fork，所以「派工前寫清楚」「指定模型省額度」這兩條在 fork 上不成立。規則檔要求要指定模型的派工（haiku 批次、opus 第二意見、verifier）不用 fork（官方 [sub-agents](https://code.claude.com/docs/en/sub-agents#how-forks-differ-from-other-subagents)）。
+- 用 Workflow 工具（多 agent 編排腳本）派出的 agent 也不經過派工檢查，實測 `dispatch_gate.py` 不會觸發。這類派工有沒有照 `dispatch-template` 寫，只能靠 Claude 自己遵守規則檔。
 - 對話被壓縮後，派工前要重新載入 `dispatch-template`。手動 `/compact`、對話太長的自動壓縮、閒置自動壓縮都算。閒置自動壓縮從 2.1.299 起預設開啟，對話超過 20 萬 token 又離開約 54 分鐘就會發生，所以離開座位回來第一次派工可能會被擋一次，載入模板後就放行。壓縮後 skill 只留開頭 5,000 tokens，重新載入才拿得回完整內容（官方 [skills](https://code.claude.com/docs/en/skills#skill-content-lifecycle)）。
 - hook 腳本和 `.claude/settings.json` 每回合都會自動執行，安裝時沒有替它們加 deny 規則。Claude Code 本來就把 `.claude/` 當成保護路徑，手動模式和 acceptEdits 模式下寫入前一定問你，auto mode 下交給分類模型審查，settings 裡的 allow 規則也放行不了（官方 [permission-modes](https://code.claude.com/docs/en/permission-modes#protected-paths)）。再加 deny，連你自己請 Claude 改設定、setup 寫保護規則都會被擋。Claude 要改 `.claude/` 底下的檔案時，看清楚它改什麼再同意。
 - 額度：規則預設會派 opus 做第二意見和升級重派，verifier 固定用 `effort: high`，`/goal` 每回合還要另一個模型判斷條件，這幾項都比較吃額度。額度少的話，照規則檔「額度有限時」一節降級；派出去報模型不可用或額度不足時怎麼辦，也寫在規則檔。
