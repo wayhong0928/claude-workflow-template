@@ -80,7 +80,7 @@ Windows 上打 `python` 如果跳出 Microsoft Store，代表還沒裝 Python，
    - Git：git --version。
 2. 沒有 Python 或 Claude Code 版本太舊：停下來，告訴我怎麼裝或更新（Python：Windows 用 winget install Python.Python.3.12，macOS 用 brew install python，Ubuntu／WSL 用 sudo apt install python3；Claude Code：看它是怎麼裝的，原生安裝用 claude update，WinGet 用 winget upgrade Anthropic.ClaudeCode，Homebrew 用 brew upgrade claude-code），問我要不要現在做。我說不要，就到此結束。
 3. 沒有 Git：問我要不要裝（Windows：winget install Git.Git；macOS：xcode-select --install；Ubuntu／WSL：sudo apt install git）。我說不要也沒關係，下一步改下載 ZIP。
-4. 把 template 的 v1.0.0 版下載到暫存資料夾，不要放進我的專案。有 Git 就用 git clone --branch v1.0.0 --depth 1 https://github.com/wayhong0928/claude-workflow-template.git；沒有就下載 https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.0.0.zip 再解壓縮。
+4. 把 template 的 v1.1.0 版下載到暫存資料夾，不要放進我的專案。有 Git 就用 git clone --branch v1.1.0 --depth 1 https://github.com/wayhong0928/claude-workflow-template.git；沒有就下載 https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.1.0.zip 再解壓縮。
 5. 問我要不要裝 session_log（每次開 session 自動接上次的進度，會在專案裡多出 session_log.md 和 TODO.md）。給我一句建議：這個資料夾不是 git repo（例如論文資料夾、Obsidian 筆記庫）就建議裝；是程式 repo 的話可以不裝。再問我有沒有不能讓你改的原始資料（PDF、問卷原始檔、已送審的文件），有的話列出資料夾或檔案。
 6. 先預演：python <暫存資料夾>/install.py <我的專案資料夾> --dry-run，加上 --session-log 或 --no-session-log；第 5 步列出的原始資料，每個路徑加一個 --protect <路徑>。把它列出的動作講給我聽；我同意後，拿掉 --dry-run 正式執行。指令裡的 python 換成第 1 步找到的那個。
 7. 在我的專案資料夾跑 python .claude/hooks/tests/run_tests.py（python 一樣換成第 1 步找到的那個），最後一行是「N/N 通過」，前後兩個數字一樣就是全過。沒通過就把輸出貼給我，不要自己改 hook。
@@ -94,7 +94,7 @@ Windows 上打 `python` 如果跳出 Microsoft Store，代表還沒裝 Python，
 
 下面的指令假設專案資料夾是使用者資料夾底下的 `碩論筆記`（`~` 代表使用者資料夾，Windows、macOS、Linux 都通用），換成你自己的。路徑有空白的話，整段用引號包起來。macOS、Linux、WSL 把 `python` 換成 `python3`。
 
-1. 下載 [v1.0.0 的 ZIP](https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.0.0.zip)，解壓縮到任何地方（不要解壓縮到你的專案裡）。會用 Git 的話，`git clone --branch v1.0.0 --depth 1` 也可以。
+1. 下載 [v1.1.0 的 ZIP](https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.1.0.zip)，解壓縮到任何地方（不要解壓縮到你的專案裡）。會用 Git 的話，`git clone --branch v1.1.0 --depth 1` 也可以。
 2. 在解壓縮出來的資料夾打開終端機（Windows：在資料夾空白處按右鍵，選「在終端機中開啟」；macOS：開「終端機」，打 `cd `（後面有空格）再把資料夾拖進視窗、按 Enter；Linux、WSL：用 `cd` 切過去），先預演（路徑換成你的專案）：
 
    ```
