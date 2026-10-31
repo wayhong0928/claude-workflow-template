@@ -2,8 +2,8 @@ import type { PromptAutocompleteInput, PromptAutocompleteResult, PromptEditInput
 import { expect, test } from 'claude-code/testing'
 
 import type { IndexGoal, IndexItem, IndexProject, TodoIndex } from '../types'
-import { HINT, byProject, configDirOf, goalsOf, itemsOf, nextOf, paneData, projectOf, render, renderGoals, resolveRoot, rootsOf, splitView, summarize, timeView } from './view'
-import { countsOf, hintFor, listAll, suggest, viewOf } from './register'
+import { HINT, byProject, configDirOf, goalsOf, itemsOf, mineGroups, nextOf, paneData, projectOf, render, renderGoals, resolveRoot, rootsOf, splitView, summarize, timeView } from './view'
+import { countsOf, hintFor, listAll, suggest, viewOf, viewsOf } from './register'
 
 // 解析在 scripts/todo_core.py（有自己的 unittest）；這裡只測「給 index、看畫面」。
 const today = new Date(2026, 9, 18)
@@ -234,6 +234,12 @@ test('pane 版面：你要做的跨專案集中、照組別與期限排；等外
   expect(claude.total).toBe(4)
   expect(claude.counts).toEqual([{ project: 'notes', n: 3 }, { project: 'thesis', n: 1 }])
   expect(claude.soon).toEqual([{ project: 'notes', text: '快到', left: 2 }])
+  // 你要做的再依專案分小組：專案照側欄順序（所在專案 notes 在前），組內順序不變
+  const mine2 = [...mine, { tag: '你', project: 'notes', text: '晚到', left: 9 }]
+  expect(mineGroups(mine2, ['notes', 'thesis']).map(g => [g.tag, g.projects.map(p => `${p.project}:${p.rows.map(r => r.text).join('、')}`)])).toEqual([
+    ['待你決定', ['thesis:要不要改題目']],
+    ['你', ['notes:沒期限、晚到', 'thesis:繳交']],
+  ])
 })
 
 test('時間版面：帶期限的跨專案照剩幾天分三段，goal 計畫補回來；沒期限的只算條數', () => {
@@ -261,6 +267,13 @@ test('/todo view 認得代號、按鍵數字和中文名', () => {
   expect(viewOf('你')).toBe('mine')
   expect(viewOf('亂打')).toBe(undefined)
   expect(viewOf(undefined)).toBe(undefined)
+  // 設定只開兩個版面時，按鍵照設定的順序重新編號；不認得的忽略，全不認得就四種全開
+  const two = viewsOf(['mine', 'Goal', '亂打', 'mine'])
+  expect(two.map(x => x[0])).toEqual(['mine', 'goal'])
+  expect(viewOf('2', two)).toBe('goal')
+  expect(viewOf('project', two)).toBe(undefined)
+  expect(viewsOf(['亂打']).length).toBe(4)
+  expect(viewsOf(undefined).length).toBe(4)
 })
 
 test('專案版面：已加入 goal 計畫的排在各專案最後一組，條目全併進計畫的專案也列出', () => {
@@ -360,4 +373,66 @@ test('沒有設定檔時側欄只顯示一行提示，不報錯', async ($, on) 
   await ui.unmount()
   const ran = await $.command.run({ command: 'todo', args: '', origin: { kind: 'plugin', name: 'todo' } } as Parameters<typeof $.command.run>[0])
   expect(ran.text).toBe(HINT)
+})
+
+test('你要做的：多個專案時依專案分小組，條目前面不再標專案名', async ($, on) => {
+  const files: Record<string, string> = {
+    '/cfg/todo.config.json': JSON.stringify({ home: 'notes', projects: [{ name: 'notes', root: '~/projects/notes', todo: ['TODO.md'] }, { name: 'thesis', root: '~/projects/thesis', todo: ['TODO.md'] }] }),
+    '/cfg/todo_index.json': JSON.stringify(index([project('notes', [item('你', '甲')]), project('thesis', [item('你', '乙'), item('你決定', '丙')])])),
+  }
+  on('fs.read', async (_$, e) => {
+    const p = e.path.split(String.fromCharCode(92)).join('/')
+    const hit = Object.keys(files).find(k => p.endsWith(k))
+    if (!hit) throw new Error('not found')
+    return { value: files[hit]! }
+  })
+  on('env.get', async (_$, e) => ({ value: e.name === 'CLAUDE_CONFIG_DIR' ? '/cfg' : e.name === 'HOME' ? '/home/u' : undefined }))
+  on('session.cwd', async () => ({ value: '/home/u/projects/notes' }))
+  on('store.get', async () => ({ value: undefined }))
+  on('store.set', async () => ({ value: undefined }))
+  on('command.register', async () => ({ value: { command: 'todo' } }))
+  on('ui.open', async () => ({ value: { isPlaced: true as const } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/home/u/projects/notes', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'todo', component: 'Pane', requestId: 'todo', surface: 'terminal', props: PANE_PROPS })
+  expect((await ui.find({ type: 'Text', text: /你要做的/ }))?.text).toBe('你要做的（3）')
+  expect(await ui.find({ type: 'Text', text: 'notes（1）' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'thesis（1）' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '乙' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /｜乙/ })).toBe(undefined)
+})
+
+test('設定 views 只開「你」與 Goal：頂端只有兩個按鍵，提示的按鍵跟著重編', async ($, on) => {
+  const files: Record<string, string> = {
+    '/cfg/todo.config.json': JSON.stringify({ home: 'notes', views: ['mine', 'goal'], projects: [{ name: 'notes', root: '~/projects/notes', todo: ['TODO.md'] }] }),
+    '/cfg/todo_index.json': JSON.stringify(index([project('notes', [item('你', '甲'), item('Claude', '乙')])], [
+      { file: '/home/u/projects/notes/計畫_甲.md', title: '甲計畫', due: null, project: 'notes', next: '第一步', sections: [{ title: '一', done: 0, total: 1, steps: [{ text: '第一步', done: false }] }] } as unknown as IndexGoal,
+    ])),
+  }
+  on('fs.read', async (_$, e) => {
+    const p = e.path.split(String.fromCharCode(92)).join('/')
+    const hit = Object.keys(files).find(k => p.endsWith(k))
+    if (!hit) throw new Error('not found')
+    return { value: files[hit]! }
+  })
+  on('env.get', async (_$, e) => ({ value: e.name === 'CLAUDE_CONFIG_DIR' ? '/cfg' : e.name === 'HOME' ? '/home/u' : undefined }))
+  on('session.cwd', async () => ({ value: '/home/u/projects/notes' }))
+  on('store.get', async (_$, e) => ({ value: e.key === 'paneView' ? 'time' : undefined }))
+  on('store.set', async () => ({ value: undefined }))
+  on('command.register', async () => ({ value: { command: 'todo' } }))
+  on('ui.open', async () => ({ value: { isPlaced: true as const } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/home/u/projects/notes', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'todo', component: 'Pane', requestId: 'todo', surface: 'terminal', props: PANE_PROPS })
+  // 上次記住的是「時間」，設定沒開它，就落回第一個「你」
+  expect((await ui.find({ type: 'Text', text: /你要做的/ }))?.text).toBe('你要做的（1）')
+  expect(await ui.find({ type: 'Text', text: /全部展開按/ })).toBe(undefined)
+  // 沒開「專案」版面，Claude 的待辦在「你」這頁全展開
+  expect(await ui.find({ type: 'Text', text: '乙' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /逐步看按 2/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /按 1～2 換版面/ })).toBeTruthy()
+  await ui.press({ key: 'view-goal' })
+  expect(await ui.find({ type: 'Text', text: /你要做的/ })).toBe(undefined)
+  const ran = await $.command.run({ command: 'todo', args: 'view project', origin: { kind: 'plugin', name: 'todo' } } as Parameters<typeof $.command.run>[0])
+  expect(ran.text).toBe('版面有 1 你（mine）、2 Goal（goal），例如 /todo view 2')
 })

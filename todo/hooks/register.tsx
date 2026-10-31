@@ -6,6 +6,8 @@ import {
   HINT,
   hintData,
   itemsOf,
+  mineGroups,
+  restGroups,
   paneData,
   projectOf,
   render,
@@ -35,13 +37,20 @@ const isBandHidden = atom({ plugin: 'todo', key: 'isBandHidden' } as const, fals
 const VIEW = 'paneView'
 const VIEWS: [PaneView, string][] = [['mine', '你'], ['project', '專案'], ['time', '時間'], ['goal', 'Goal']]
 const view = atom({ plugin: 'todo', key: 'view' } as const, 'mine' as PaneView)
-export const viewOf = (s: unknown): PaneView | undefined =>
-  VIEWS.find(([id, label], i) => s === id || s === label || s === String(i + 1))?.[0]
+// list 是側欄實際顯示的版面，按鍵數字照它的順序
+export const viewOf = (s: unknown, list = VIEWS): PaneView | undefined =>
+  list.find(([id, label], i) => s === id || s === label || s === String(i + 1))?.[0]
+// todo.config.json 的 views：認得代號或中文名，去重；一個都不認得就四種全開
+export function viewsOf(want: unknown): [PaneView, string][] {
+  const ids = Array.isArray(want) ? want.map(w => viewOf(w)).filter((v): v is PaneView => v !== undefined) : []
+  const list = [...new Set(ids)].map(id => VIEWS.find(x => x[0] === id)!)
+  return list.length ? list : VIEWS
+}
 const GROUP_NAME: Record<string, string> = { 你: '你的待辦', Claude: 'Claude 的待辦', 等外部: '等外部', Goal: '已加入 goal 計畫' }
 const WHO: Record<string, string> = { 待你決定: '決定', 等外部: '等' }
 
 // 最近一次讀到的 index 與設定；自動完成和輸入框提示只讀這份，不在打字時讀檔。
-type Loaded = { index: TodoIndex; at: string | undefined; home: string | undefined }
+type Loaded = { index: TodoIndex; at: string | undefined; home: string | undefined; views: PaneView[] }
 let loaded: Loaded | null = null
 let counts = new Map<string, Summary>()
 
@@ -92,8 +101,9 @@ export const register: Register = on => {
     }
     const [cmd, arg] = args.split(/\s+/)
     if (cmd?.toLowerCase() === 'view') {
-      const v = viewOf(arg)
-      if (!v) return { text: `版面有 ${VIEWS.map(([id, l], i) => `${i + 1} ${l}（${id}）`).join('、')}，例如 /todo view 2` }
+      const list = viewsOf(loaded?.views)
+      const v = viewOf(arg, list)
+      if (!v) return { text: `版面有 ${list.map(([id, l], i) => `${i + 1} ${l}（${id}）`).join('、')}，例如 /todo view 2` }
       await setView($, v)
       return { text: `TODO 側欄改用「${VIEWS.find(x => x[0] === v)![1]}」版面` }
     }
@@ -143,7 +153,14 @@ export const register: Register = on => {
     const d = await read($, pane)
     if (!d) return <Text dimColor>讀取 TODO 中…</Text>
     if (d.hint) return <Text dimColor>{d.hint}</Text>
-    const v = await read($, view)
+    // 只顯示設定的版面；記住的版面被設定拿掉了就用第一個。key 是該版面的按鍵，沒顯示就是 undefined
+    const shown = viewsOf(d.views)
+    const saved = await read($, view)
+    const v = shown.some(x => x[0] === saved) ? saved : shown[0]![0]
+    const key = (id: PaneView) => {
+      const i = shown.findIndex(x => x[0] === id)
+      return i < 0 ? undefined : String(i + 1)
+    }
     // 只列一個專案時不必標專案名
     const where = (p: string) => (d.projects.length > 1 ? `${p}｜` : '')
     // 每條都照 goal 版面的樣子：○ 開頭，有期限的接著標剩幾天，折行時對齊內文
@@ -166,7 +183,7 @@ export const register: Register = on => {
     )
     const tabs = (
       <Box flexDirection="row">
-        {VIEWS.map(([id, label], i) => (
+        {shown.map(([id, label], i) => (
           <Box key={id} marginRight={1}>
             <Button key={`view-${id}`} label={label} hotkey={String(i + 1)} plain dimColor={v !== id} onPress={() => setView($, id)} />
           </Box>
@@ -174,20 +191,30 @@ export const register: Register = on => {
       </Box>
     )
 
+    // 一組依專案分小組的條目：多個專案時列「專案（n）」再縮排，只有一個專案時直接縮排
+    const byGroup = (k: string, ps: { project: string; rows: { text: string; left?: number }[] }[]) =>
+      ps.map(p => (
+        <Box key={`${k}-${p.project}`} flexDirection="column" paddingLeft={2}>
+          {d.projects.length > 1 && <Text color="claude">{`${p.project}（${p.rows.length}）`}</Text>}
+          <Box flexDirection="column" paddingLeft={d.projects.length > 1 ? 2 : 0}>
+            {p.rows.map((r, j) => row(`${k}-${p.project}-${j}`, r.left, r.text))}
+          </Box>
+        </Box>
+      ))
+    // 沒開「專案」版面時，等外部與 Claude 在這裡全展開
+    const isFull = !key('project')
+
     const mineView = () => {
       const { mine, waiting, claude } = splitView(d.projects)
       return (
         <Box flexDirection="column">
           <Text bold color="claude">{`你要做的（${mine.length}）`}</Text>
           {mine.length === 0 && <Text dimColor>沒有</Text>}
-          {mine.map((r, j) => (
-            <Box key={`m${j}`} flexDirection="column">
-              {(j === 0 || mine[j - 1]!.tag !== r.tag) && (
-                <Box marginTop={j === 0 ? 0 : 1}>
-                  <Text bold color={r.tag === '待你決定' ? 'warning' : undefined}>{r.tag === '你' ? '待辦' : r.tag}</Text>
-                </Box>
-              )}
-              {row(`r${j}`, r.left, `${where(r.project)}${r.text}`)}
+          {/* 組別 → 專案（縮兩格）→ 條目（再縮兩格）；只有一個專案時不列專案名 */}
+          {mineGroups(mine, d.projects.map(p => p.name)).map((g, k) => (
+            <Box key={`m-${g.tag}`} flexDirection="column" marginTop={k === 0 ? 0 : 1}>
+              <Text bold color={g.tag === '待你決定' ? 'warning' : undefined}>{g.tag === '你' ? '待辦' : g.tag}</Text>
+              {byGroup(`m-${g.tag}`, g.projects)}
             </Box>
           ))}
           {d.next && d.next.steps.length > 0 && (
@@ -204,7 +231,7 @@ export const register: Register = on => {
               <Box key={g.file} flexDirection="column" marginTop={1}>
                 <Text bold color="claude">Goal 計畫</Text>
                 {head('title', g.left, g.title)}
-                <Text dimColor>{`  已勾 ${done}/${total} 步 · 逐步看按 4`}</Text>
+                <Text dimColor>{`  已勾 ${done}/${total} 步${key('goal') ? ` · 逐步看按 ${key('goal')}` : ''}`}</Text>
                 {g.next && <Text wrap="truncate-end">{`  接著做：${g.next}`}</Text>}
               </Box>
             )
@@ -212,15 +239,21 @@ export const register: Register = on => {
           {waiting.total > 0 && (
             <Box flexDirection="column" marginTop={1}>
               <Text bold color="claude">{`等外部（${waiting.total}）`}</Text>
-              {waiting.soon.map((r, j) => row(`w${j}`, r.left, `${where(r.project)}${r.text}`))}
+              {isFull ? byGroup('w', restGroups(d.projects, true)) : waiting.soon.map((r, j) => row(`w${j}`, r.left, `${where(r.project)}${r.text}`))}
             </Box>
           )}
           {claude.total > 0 && (
             <Box flexDirection="column" marginTop={1}>
               <Text bold color="claude">{`Claude 的待辦（${claude.total}）`}</Text>
-              {claude.soon.map((r, j) => row(`c${j}`, r.left, `${where(r.project)}${r.text}`))}
-              <Text dimColor>{claude.counts.map(c => `${c.project} ${c.n}`).join(' · ')}</Text>
-              <Text dimColor>全部展開按 2</Text>
+              {isFull ? (
+                byGroup('c', restGroups(d.projects, false))
+              ) : (
+                <Box flexDirection="column">
+                  {claude.soon.map((r, j) => row(`c${j}`, r.left, `${where(r.project)}${r.text}`))}
+                  <Text dimColor>{claude.counts.map(c => `${c.project} ${c.n}`).join(' · ')}</Text>
+                  <Text dimColor>{`全部展開按 ${key('project')}`}</Text>
+                </Box>
+              )}
             </Box>
           )}
         </Box>
@@ -259,7 +292,7 @@ export const register: Register = on => {
             </Box>
           ))}
           <Box marginTop={1}>
-            <Text dimColor>{`沒期限的：你 ${t.undated.mine} 條（按 1）、Claude ${t.undated.claude} 條（按 2）`}</Text>
+            <Text dimColor>{`沒期限的：你 ${t.undated.mine} 條${key('mine') ? `（按 ${key('mine')}）` : ''}、Claude ${t.undated.claude} 條${key('project') ? `（按 ${key('project')}）` : ''}`}</Text>
           </Box>
         </Box>
       )
@@ -298,7 +331,7 @@ export const register: Register = on => {
           {body}
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>{`${d.date} 更新 · ctrl+x tab 後按 1～4 換版面，方向鍵捲動`}</Text>
+          <Text dimColor>{`${d.date} 更新 · ctrl+x tab 後按 1～${shown.length} 換版面，方向鍵捲動`}</Text>
         </Box>
       </Box>
     )
@@ -345,7 +378,7 @@ export async function load($: EngineInterface): Promise<Loaded | null> {
   const index = await readJson<TodoIndex>($, `${dir}/${INDEX}`)
   if (!conf || !index || !Array.isArray(index.projects)) return null
   const at = projectOf(await $.session.cwd().catch(() => ''), rootsOf(conf, { home, isWsl }))
-  return { index, at, home: conf.home ?? index.home ?? index.projects[0]?.name }
+  return { index, at, home: conf.home ?? index.home ?? index.projects[0]?.name, views: viewsOf(conf.views).map(x => x[0]) }
 }
 
 async function readJson<T>($: EngineInterface, path: string): Promise<T | null> {
@@ -359,7 +392,7 @@ async function readJson<T>($: EngineInterface, path: string): Promise<T | null> 
 }
 
 export function dataOf(l: Loaded | null, t: Date, now: Date): PaneData {
-  return l ? paneData(l.index, t, l.at, l.home, now) : hintData(now)
+  return l ? { ...paneData(l.index, t, l.at, l.home, now), views: l.views } : hintData(now)
 }
 
 async function refresh($: EngineInterface) {

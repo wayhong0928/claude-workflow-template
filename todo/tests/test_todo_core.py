@@ -352,6 +352,18 @@ class Commands(Tmp):
         self.assertIn("【別的】未完成 1 條", out)
         self.assertIn("別的專案的事", out)
 
+    def test_render_lists_merged_items_under_goal_only(self):
+        self.write("proj/計畫_甲.md", NL.join(["# 計畫：甲計畫", "/goal 照做", "## 一", "- [ ] 第一步"]))
+        self.write("proj/TODO.md", NL.join([
+            "- [ ] [你] 星期六貼 /goal（計畫 計畫_甲.md）（建 10-13）",
+            "- [ ] [Claude] 補三塊原理（併入星期六 goal）（計畫 計畫_甲.md）（建 10-13）",
+            "- [ ] [Claude] 自己的事（建 10-13）"]))
+        out = self.run_cli(CORE, "render").stdout.decode("utf-8")
+        self.assertIn("【示範】未完成 2 條（另 1 條已併入 goal 計畫，列在下面）", out)
+        self.assertEqual(out.count("補三塊原理"), 1)
+        self.assertIn("  - 併入：示範｜補三塊原理", out)
+        self.assertIn("星期六貼 /goal", out)
+
     def test_no_config(self):
         (self.dir / "todo.config.json").unlink()
         r = self.run_cli(CORE, "index")

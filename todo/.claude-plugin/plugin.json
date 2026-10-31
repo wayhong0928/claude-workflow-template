@@ -1,6 +1,6 @@
 {
   "name": "todo",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "TODO 側欄與開場清單：Python 腳本把各專案 TODO、session_log 下一步、goal 計畫整理成 todo_index.json，mod 只讀它畫側欄；/todo 列清單，/todo pane 開側欄（1～4 切換四種版面），改到 TODO 時檢查第一行格式",
   "author": {
     "name": "WayHong",

@@ -137,6 +137,7 @@ def load_config(path=None, env=None):
             "root": root,
             "todo": [expand(join(root, t), env, wsl) for t in todo],
             "log": expand(join(root, p["log"]), env, wsl) if p.get("log") else None,
+            "skipDirs": [str(d) for d in p.get("skipDirs", [])],
         })
     conf["projects"] = projects
     conf["_path"] = str(cfg).replace("\\", "/")
@@ -402,12 +403,12 @@ def latest_next(text):
 
 # ---------- 走訪專案資料夾 ----------
 
-def walk(root, plan_glob):
+def walk(root, plan_glob, skip=()):
     """找計畫檔（planGlob）與檔頭有「到期」的 .md。只讀前 4 KB，不改任何檔。"""
     plans, expiring = {}, []
     count = 0
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS]
+        dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in SKIP_DIRS and d not in skip]
         for f in filenames:
             if not f.lower().endswith(".md"):
                 continue
@@ -452,7 +453,7 @@ def build(conf, today, env=None):
     plan_cache, goal_refs = {}, []
     seen_exp = set()
     for p in conf["projects"]:
-        plans, exp = walk(p["root"], conf["planGlob"]) if Path(p["root"]).is_dir() else ({}, [])
+        plans, exp = walk(p["root"], conf["planGlob"], p["skipDirs"]) if Path(p["root"]).is_dir() else ({}, [])
         items = []
         for path in p["todo"]:
             got, probs = scan_file(path, today, conf)
@@ -572,12 +573,17 @@ def render(index, cwd=None):
     projects = index["projects"]
     cur = project_of(cwd, projects) or next((p for p in projects if p["name"] == index.get("home")), None) \
         or (projects[0] if projects else None)
+    # 寫了「併入 … goal」又對到計畫的條目，只列在那份 goal 計畫底下，不在各專案重複列（跟側欄一致）
+    def own(p):
+        return [i for i in p["items"] if not (i.get("goal") and i.get("merged"))]
     out = ["=== 待辦（todo plugin）：%s 全列，依「誰要做」分組；其他專案只列條數與 %d 天內到期的 ===" % (
         cur["name"] if cur else "沒有專案", soon_days)]
     if cur:
-        out.append("【%s】未完成 %d 條" % (cur["name"], len(cur["items"])))
+        items = own(cur)
+        moved = len(cur["items"]) - len(items)
+        out.append("【%s】未完成 %d 條%s" % (cur["name"], len(items), "（另 %d 條已併入 goal 計畫，列在下面）" % moved if moved else ""))
         for who, label in GROUPS:
-            group = [i for i in cur["items"] if i["who"] == who]
+            group = [i for i in items if i["who"] == who]
             if not group:
                 continue
             group.sort(key=lambda i: (i["due"] is None, i["due"] or ""))
@@ -592,6 +598,8 @@ def render(index, cwd=None):
             due = "" if not g["due"] else "（到期 %s）" % g["due"][5:]
             out.append("- %s%s：已勾 %d/%d 步%s" % (g["title"], due, done, total,
                                                    "，接著做：" + g["next"] if g["next"] else ""))
+            merged = [(p["name"], i) for p in projects for i in p["items"] if i.get("goal") == g["id"] and i.get("merged")]
+            out += ["  - 併入：%s｜%s%s" % (n, i["text"], mark(i, today)) for n, i in merged]
     exp = index.get("expiring", [])
     if exp:
         out += ["", "【有效期檔案】3 天內到期或已過期（要延後就改檔頭的到期日；這裡只提醒，不搬檔）："]
@@ -602,11 +610,11 @@ def render(index, cwd=None):
                     left = "過 %d 天" % -e["left"] if e["left"] < 0 else "剩 %d 天" % e["left"]
                     after = "；到期後：「%s」" % e["after"] if e.get("after") else ""
                     out.append("- %s｜%s（到期 %s，%s）%s" % (e["project"], e["rel"], e["due"][5:], left, after))
-    others = [p for p in projects if p is not cur and p["items"]]
+    others = [p for p in projects if p is not cur and own(p)]
     if others:
-        out += ["", "【其他專案】未完成條數：" + "、".join("%s %d" % (p["name"], len(p["items"])) for p in others)
+        out += ["", "【其他專案】未完成條數：" + "、".join("%s %d" % (p["name"], len(own(p))) for p in others)
                 + "；%d 天內到期或已過期：" % soon_days]
-        soon = [(p["name"], i) for p in others for i in p["items"]
+        soon = [(p["name"], i) for p in others for i in own(p)
                 if i["due"] and left_of(i["due"], today) <= soon_days]
         soon.sort(key=lambda x: x[1]["due"])
         out += ["- %s［%s］%s%s" % (n, dict(GROUPS).get(i["who"], i["who"]), i["text"], mark(i, today)) for n, i in soon] or ["- 沒有"]

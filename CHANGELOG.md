@@ -1,5 +1,21 @@
 # 更新紀錄
 
+## 1.1.0（workflow-kit）、0.9.0（todo）
+
+測試過的 Claude Code 版本：2.1.316（Windows 11）。
+
+### todo plugin（0.9.0）
+
+- 新增 `views` 設定：側欄只開設定列的版面，照設定順序編按鍵。沒開「各專案」時，「你要做的」裡的等外部與 Claude 改成全展開。
+- 「你要做的」的待你決定與你兩組，底下再依專案分小組、縮排。
+- 開場清單也照側欄的方式處理併入條目：條目寫了「併入 … goal」又對得上計畫的，只列在那份計畫底下，不在專案裡重複列。
+- 新增 `projects[].skipDirs`：找計畫檔與有效期檔時跳過列出的資料夾。大專案的 `.md` 超過 3000 個時，後面的資料夾原本會掃不到。
+
+### setup 與說明
+
+- `/workflow-kit:setup` 的 /todo 側欄一步多問要開哪些版面，依專案數與用不用 `/goal` 建議一組，寫進 `views`。
+- README（中英）與介紹頁加上 TODO 側欄的四種版面、`views` 怎麼挑。
+
 ## 1.0.0（workflow-kit）、0.8.0（todo）
 
 測試過的 Claude Code 版本：2.1.310（Windows 11）。Python 測試另在 WSL Ubuntu（Python 3.12）跑過。macOS 沒測過。

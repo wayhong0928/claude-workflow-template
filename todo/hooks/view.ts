@@ -136,6 +136,28 @@ export function splitView(projects: PaneProject[]): { mine: MineRow[]; waiting: 
   return { mine, waiting, claude }
 }
 
+// 「你要做的」再依專案分小組：組別照 MINE，專案照側欄順序（所在專案在前），組內沿用 splitView 排好的順序。
+export type MineGroup = { tag: string; projects: { project: string; rows: MineRow[] }[] }
+
+export function mineGroups(mine: MineRow[], order: string[]): MineGroup[] {
+  return MINE.map(tag => {
+    const rows = mine.filter(r => r.tag === tag)
+    const names = [...order, ...rows.map(r => r.project).filter(p => !order.includes(p))]
+    return { tag, projects: [...new Set(names)].map(project => ({ project, rows: rows.filter(r => r.project === project) })).filter(p => p.rows.length > 0) }
+  }).filter(g => g.projects.length > 0)
+}
+
+// 沒開「專案」版面時，「你」版面的等外部、Claude 兩組改成全展開，一樣依專案分小組，組內近的在前。
+export function restGroups(projects: PaneProject[], isWaiting: boolean): { project: string; rows: PaneRow[] }[] {
+  const far = Number.MAX_SAFE_INTEGER
+  return projects
+    .map(p => ({
+      project: p.name,
+      rows: p.groups.filter(g => !MINE.includes(g.tag) && (g.tag === '等外部') === isWaiting).flatMap(g => g.rows).sort((a, b) => (a.left ?? far) - (b.left ?? far)),
+    }))
+    .filter(p => p.rows.length > 0)
+}
+
 // 時間版面：有期限的跨專案照剩幾天排，分已過期、7 天內、之後；沒期限的只算條數。
 export type TimeView = { buckets: { name: string; rows: MineRow[] }[]; undated: { mine: number; claude: number } }
 const YOURS = ['待你決定', '你', '等外部']
