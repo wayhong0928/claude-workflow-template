@@ -13,7 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 INSTALL = ROOT / "install.py"
-# 在 Claude Code session 裡跑時，CLAUDE_PLUGIN_DATA、CLAUDE_PROJECT_DIR 這類變數會讓 hook 把狀態寫到沙箱外，子行程一律不帶 CLAUDE* 變數
+# 在 Claude Code session 裡跑時，CLAUDE_PLUGIN_DATA、CLAUDE_PROJECT_DIR 這類變數會讓 hook 把狀態寫到沙箱外，跑 install.py 和 hook 的子行程不帶 CLAUDE* 變數
 BASE_ENV = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
 
 results = []

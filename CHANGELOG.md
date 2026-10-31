@@ -40,5 +40,4 @@
 - 沒有 `todo.config.json` 時，開場提示寫的是 `/workflow-kit:setup`，用 `install.py --todo` 裝的人沒有這個指令。提示要依裝法換字。
 - `todo_lint.py` 的警告叫人去看「todo plugin 的 README」，repo 路線也該指得到。
 - macOS 實機測試。
-- 用 Workflow 工具派出的 agent 會不會觸發 `dispatch_gate`，還沒實測。
 - 兩個 plugin 找 Python 的方式不同（`workflow-kit` 用 `userConfig.python`，`todo` 依序試 `python3`、`python`、`py`），要不要統一。

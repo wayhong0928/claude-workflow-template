@@ -89,7 +89,7 @@ class Sandbox:
             if not src.is_file():
                 raise SystemExit(f"hook not found: {src}")
             shutil.copy2(src, self.hooks / name)
-        # 在 Claude Code session 裡跑時，CLAUDE_PLUGIN_DATA、CLAUDE_PROJECT_DIR 這類變數會讓 hook 把狀態寫到沙箱外，子行程一律不帶 CLAUDE* 變數
+        # 在 Claude Code session 裡跑時，CLAUDE_PLUGIN_DATA、CLAUDE_PROJECT_DIR 這類變數會讓 hook 把狀態寫到沙箱外，跑 install.py 和 hook 的子行程不帶 CLAUDE* 變數
         base = {k: v for k, v in os.environ.items() if not k.startswith("CLAUDE")}
         self.env = dict(base, USERPROFILE=str(self.home), HOME=str(self.home),
                         PYTHONIOENCODING="utf-8")
