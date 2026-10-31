@@ -3,6 +3,6 @@
 每做完一段有意義的工作補一筆，新的放最上面。開場時 hook 會注入最新 1 筆全文，第 2、3 筆只注入標題與「下一步」。
 
 格式：`## YYYY-MM-DD | 主題`，下面固定三段：做了什麼、決定了什麼、下一步，合計 600 字內。同一天同一主題合併成一筆。還沒做的事寫進 TODO.md，這裡只用一句話指過去。
-新紀錄用 `.claude/session-log-kit/add_session_log.py` 插入，不要手動貼；範例見 `.claude/session-log-kit/README.md`。
+新紀錄用 `add_session_log.py` 插入，不要手動貼。plugin 裝法照開場注入第一段給的指令跑；install.py 裝法的腳本在 `.claude/session-log-kit/add_session_log.py`，範例見同資料夾的 README.md。
 
 ---
