@@ -1,6 +1,6 @@
 {
   "name": "workflow-kit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Claude Code 工作流起手包：派 subagent 前先載派工模板、fresh-context verifier 驗收、session_log 開場接力、context 過大提醒、控制字元檢查",
   "author": {
     "name": "WayHong",

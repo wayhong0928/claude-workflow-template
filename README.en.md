@@ -82,7 +82,7 @@ Please install claude-workflow-template (https://github.com/wayhong0928/claude-w
    - Git: git --version.
 2. If Python is missing or Claude Code is too old: stop, tell me how to install or update it (Python: winget install Python.Python.3.12 on Windows, brew install python on macOS, sudo apt install python3 on Ubuntu/WSL; Claude Code depends on how it was installed: claude update for a native install, winget upgrade Anthropic.ClaudeCode for WinGet, brew upgrade claude-code for Homebrew), and ask whether to do it now. If I say no, stop here.
 3. If Git is missing: ask whether to install it (Windows: winget install Git.Git; macOS: xcode-select --install; Ubuntu/WSL: sudo apt install git). If I say no, that's fine; download the ZIP in the next step instead.
-4. Download version v1.0.0 of the template into a temp folder, not into my project. With Git, use git clone --branch v1.0.0 --depth 1 https://github.com/wayhong0928/claude-workflow-template.git; without it, download https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.0.0.zip and unzip it.
+4. Download version v1.1.0 of the template into a temp folder, not into my project. With Git, use git clone --branch v1.1.0 --depth 1 https://github.com/wayhong0928/claude-workflow-template.git; without it, download https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.1.0.zip and unzip it.
 5. Ask whether I want session_log (each session automatically picks up the previous one; it adds session_log.md and TODO.md to the project). Give me a one-line recommendation: if this folder is not a git repo (for example a thesis folder or an Obsidian vault), recommend it; if it's a code repo, it can be skipped. Then ask whether there is raw data you must not change (PDFs, raw survey files, submitted documents), and if so, list the folders or files.
 6. Dry run first: python <temp folder>/install.py <my project folder> --dry-run, plus --session-log or --no-session-log; for each raw-data path from step 5, add --protect <path>. Walk me through the actions it lists; once I agree, run it again without --dry-run. Replace python with the one you found in step 1.
 7. In my project folder, run python .claude/hooks/tests/run_tests.py (again with the python from step 1). The last line reads "N/N 通過" ("通過" means passed); if the two numbers match, everything passed. If it doesn't pass, paste the output to me and don't modify the hooks yourself.
@@ -96,7 +96,7 @@ Please install claude-workflow-template (https://github.com/wayhong0928/claude-w
 
 The commands below assume the project folder is `thesis-notes` in your home folder (`~` means your home folder and works on Windows, macOS, and Linux); replace it with your own. If the path has spaces, wrap the whole path in quotes. On macOS, Linux, and WSL, replace `python` with `python3`.
 
-1. Download the [v1.0.0 ZIP](https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.0.0.zip) and unzip it anywhere (not inside your project). If you use Git, `git clone --branch v1.0.0 --depth 1` works too.
+1. Download the [v1.1.0 ZIP](https://github.com/wayhong0928/claude-workflow-template/archive/refs/tags/v1.1.0.zip) and unzip it anywhere (not inside your project). If you use Git, `git clone --branch v1.1.0 --depth 1` works too.
 2. Open a terminal in the unzipped folder (Windows: right-click an empty spot in the folder and choose "Open in Terminal"; macOS: open Terminal, type `cd ` with a trailing space, drag the folder into the window, and press Enter; Linux, WSL: `cd` into it), then do a dry run (replace the path with your project):
 
    ```
@@ -213,6 +213,23 @@ It checks entry by entry by reading files and the web, with no automated script,
 
 - It can't read full text behind a paywall and will mark those "can't determine". Put the PDF in the project and give its path in the criteria so it can check against the original.
 - It can miss things. For key claims going into your thesis, spot-check a few citations it marked as passing.
+
+## TODO side pane (optional)
+
+`todo@workflow-kit` is a separate plugin that gathers the TODOs of several projects into one side pane. `todo_core.py` reads each project's TODO.md, the next step in session_log, and goal plan files, and writes `todo_index.json`. The pane and `/todo` only read that file and never change your files. The data-flow diagram is in [docs/how-it-works.md](docs/how-it-works.md#todo-清單怎麼產生) (Chinese).
+
+The pane has four views, each answering one question:
+
+| View (id) | Answers | Suits |
+|---|---|---|
+| Yours (`mine`) | What do I do today? | Everyone; the default first view |
+| Projects (`project`) | What's left in a given project? | Three or more projects, switching between them often |
+| By due date (`time`) | What's due soon? | Work with outside deadlines, such as coursework or submissions |
+| Goal steps (`goal`) | How far along is each goal plan? | Running long plans with `/goal` |
+
+The `views` setting picks which views appear. With one or two projects driven mostly by goals, `["mine", "goal"]` is enough. When the Projects view is off, the Yours view expands the waiting-on-others and Claude items in full, so nothing drops out of sight. `/workflow-kit:setup` asks how many projects you have and whether you use goals, then suggests a set.
+
+An item that says it was merged into a goal (`併入 … goal`) and matches a plan is listed only under that plan; neither the session-start list nor the pane repeats it under its project. Field formats are in [todo/README.md](todo/README.md).
 
 ## Long tasks: plan first, then run to completion with `/goal`
 

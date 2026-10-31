@@ -703,6 +703,14 @@ header h1 { padding-right: 44px; }
 </svg>
 <figcaption>選用的 /todo plugin（todo@workflow-kit）把幾個專案的 TODO 集中起來看。到期日過了，開場清單只提醒，不移動也不修改任何檔。側欄怎麼做見 ai-agent-notes 的<a href="https://wayhong0928.github.io/ai-agent-notes/pages/mods.html">Mods</a>，設定與格式見 <a href="https://github.com/wayhong0928/claude-workflow-template/blob/main/todo/README.md">todo plugin 的 README</a>。</figcaption>
 </figure>
+  <p>側欄有四種版面，各回答一個問題：</p>
+  <ul>
+    <li><b>你要做的</b>：今天我要做什麼。預設第一頁。</li>
+    <li><b>各專案</b>：某個專案還剩什麼。適合三個以上專案、常在專案之間切換。</li>
+    <li><b>照期限</b>：哪些快到期。適合有課程作業、交件這類外部截止日。</li>
+    <li><b>goal 逐步</b>：goal 計畫走到哪一步。適合常用 <code>/goal</code> 跑長計畫。</li>
+  </ul>
+  <p>設定檔的 <code>views</code> 決定開哪幾頁，只有一兩個專案、主要靠 goal 推進的話，寫 <code>["mine", "goal"]</code> 就好。沒開「各專案」時，「你要做的」會把等外部與 Claude 的條目全展開，不會漏看。<code>/workflow-kit:setup</code> 會依你有幾個專案、用不用 goal 建議一組。併入 goal 計畫的條目只列在計畫底下，不在專案裡重複出現。</p>
 
   <h3>護欄</h3>
   <ul>

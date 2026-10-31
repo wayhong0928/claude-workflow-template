@@ -47,6 +47,8 @@ export type TodoConfig = {
   home?: string
   wslPrefix?: string
   projects?: { name: string; root: string }[]
+  // 側欄要顯示哪些版面、照什麼順序；不設就是四種全開
+  views?: string[]
 }
 
 // ---- 側欄畫面用的快照 ----
@@ -84,6 +86,8 @@ export type PaneData = {
   goals: GoalPlan[]
   projects: PaneProject[]
   hint?: string
+  // 側欄顯示的版面（照順序，按鍵 1、2…）；沒有就是四種全開
+  views?: PaneView[]
 }
 
 declare module 'claude-code' {
