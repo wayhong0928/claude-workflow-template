@@ -54,6 +54,7 @@
 | `planGlob` | `計畫_*.md` | goal 計畫檔的檔名樣式 |
 | `github.enabled` | `false` | 設 `true` 才追蹤 GitHub，見下面「GitHub 追蹤」。不開就完全不呼叫 `gh` |
 | `github.ttlMinutes` | 10 | `gh_cache.json` 幾分鐘內算新鮮，新鮮就不連網 |
+| `github.owners` | 不設 | 「我的」那節只列這些擁有者（帳號或組織）的 repo，例如 `["my-name"]`；同一個 GitHub 帳號也在別的組織有指派、不想在這台機器看到時用。不設就不篩 |
 | `views` | 四種全開 | 側欄顯示哪些版面、照什麼順序。寫代號 `mine`、`project`、`time`、`goal`，也認分頁上的短名稱「你」「專案」「時間」「Goal」，例如 `["mine", "goal"]`；按鍵照這個順序編 1、2…。不認得的值會略過，全部不認得就四種全開 |
 | `projects[].name` | 資料夾名 | 顯示用的專案名 |
 | `projects[].root` | 必填 | 專案資料夾，可以寫 `~` |
@@ -77,7 +78,7 @@
 }
 ```
 
-- 跨 repo 的「我的」：`gh search issues --assignee=@me`、`gh search prs --assignee=@me`、`gh search prs --review-requested=@me`，各取開著的前 50 條。
+- 跨 repo 的「我的」：`gh search issues --assignee=@me`、`gh search prs --assignee=@me`、`gh search prs --review-requested=@me`，各取開著的前 50 條。設了 `github.owners` 就每個擁有者帶一個 `--owner`，抓回來再篩一次；改了 `owners` 視為快取過期，重抓前 `index` 也不顯示清單外的條目。
 - 各專案：有 `projects[].github` 的，用 `gh issue list -R owner/repo` 與 `gh pr list -R owner/repo` 取開著的前 50 條。
 - `todo_core.py gh` 在 SessionStart 跑，把結果寫進設定資料夾的 `gh_cache.json`；快取比 `ttlMinutes` 新、而且 repo 清單沒變，就不連網。每次呼叫 `gh` 最多 10 秒（總預算 45 秒裡剩的比 10 秒少，就取剩的；剩不到 1 秒就不再呼叫，記為逾時）。快取也記著「哪個 GitHub 身分抓的」（`GH_CONFIG_DIR` 加上 `GH_TOKEN`、`GITHUB_TOKEN`、`GH_ENTERPRISE_TOKEN`、`GH_HOST` 的雜湊，不存 token 本身）；換了身分就視為過期，`index` 與開場清單也不顯示別的身分抓的資料。快取裡沒有某專案目前設定的 repo 時，那個專案不列 GitHub。這個 hook 與 `index`、`render` 同時跑，所以第一次抓到的資料要到下一次 `index`（下一次送出提示）才出現。
 - `index` 與 `render` 只讀 `gh_cache.json`，從不連網，所以不會拖慢送出提示。

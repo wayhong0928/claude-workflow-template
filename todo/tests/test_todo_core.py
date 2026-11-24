@@ -704,8 +704,39 @@ class GithubTests(Tmp):
     def test_bad_repo_name_and_bad_ttl_fall_back(self):
         self.assertIsNone(core.github_repo("not a repo"))
         self.assertEqual(core.github_repo(" o/r "), "o/r")
-        self.assertEqual(core.github_conf({"enabled": "yes", "ttlMinutes": -1}), {"enabled": False, "ttlMinutes": 10})
-        self.assertEqual(core.github_conf({"enabled": True, "ttlMinutes": 30}), {"enabled": True, "ttlMinutes": 30})
+        self.assertEqual(core.github_conf({"enabled": "yes", "ttlMinutes": -1}), {"enabled": False, "ttlMinutes": 10, "owners": []})
+        self.assertEqual(core.github_conf({"enabled": True, "ttlMinutes": 30}), {"enabled": True, "ttlMinutes": 30, "owners": []})
+
+    def test_owners_normalized_and_bad_names_dropped(self):
+        got = core.github_conf({"owners": [" Me ", "me", "a/b", "", 3, "Org-2"]})["owners"]
+        self.assertEqual(got, ["me", "org-2"])
+        self.assertEqual(core.github_conf({"owners": "me"})["owners"], [])
+
+    def test_owners_passed_to_search_and_other_owners_filtered(self):
+        calls = []
+
+        def runner(args, timeout):
+            calls.append(list(args))
+            if args[0] == "search":
+                return [{"number": 1, "title": "我的", "url": "https://github.com/Me/x/issues/1", "repository": {"nameWithOwner": "Me/x"}},
+                        {"number": 2, "title": "工作", "url": "https://github.com/work/y/issues/2", "repository": {"nameWithOwner": "work/y"}}]
+            return []
+
+        conf = self.conf(repo=None, owners=["me"])
+        core.gh_update(conf, self.dir, runner, datetime(2026, 10, 18, 9, 0))
+        self.assertTrue(all("--owner=me" in c for c in calls[:3]))
+        cache = json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))
+        self.assertEqual([r["title"] for r in cache["mine"]["assigned"]], ["我的"])
+        self.assertEqual(cache["owners"], ["me"])
+
+    def test_owners_change_makes_cache_stale_and_index_filters_old_rows(self):
+        conf_all = self.conf(repo=None)
+        core.gh_update(conf_all, self.dir, fake_gh([]), datetime(2026, 10, 18, 9, 0))
+        conf_me = self.conf(repo=None, owners=["me"])
+        self.assertFalse(core.gh_fresh(core.read_gh_cache(self.dir), conf_me, datetime(2026, 10, 18, 9, 1)))
+        self.assertTrue(core.gh_fresh(core.read_gh_cache(self.dir), conf_all, datetime(2026, 10, 18, 9, 1)))
+        idx = core.build(conf_me, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})
+        self.assertEqual(idx["github"]["mine"]["assigned"], [])  # 舊快取的 o/r 不在 owners 裡，重抓前也不顯示
 
     def test_identity_unset_differs_from_dir_named_default(self):
         self.assertNotEqual(core.gh_identity({}), core.gh_identity({"GH_CONFIG_DIR": "default"}))
