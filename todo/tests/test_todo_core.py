@@ -707,6 +707,29 @@ class GithubTests(Tmp):
         self.assertEqual(core.github_conf({"enabled": "yes", "ttlMinutes": -1}), {"enabled": False, "ttlMinutes": 10})
         self.assertEqual(core.github_conf({"enabled": True, "ttlMinutes": 30}), {"enabled": True, "ttlMinutes": 30})
 
+    def test_identity_unset_differs_from_dir_named_default(self):
+        self.assertNotEqual(core.gh_identity({}), core.gh_identity({"GH_CONFIG_DIR": "default"}))
+
+    def test_write_failure_leaves_no_temp_file(self):
+        with self.assertRaises(UnicodeEncodeError):
+            core.write_json({"x": "\ud800"}, self.dir, "gh_cache.json", direct_fallback=False)
+        self.assertEqual([p.name for p in self.dir.iterdir() if p.name.endswith(".tmp")], [])
+
+    def test_find_gh_skips_path_entry_resolving_to_cwd(self):
+        exe = "gh.exe" if os.name == "nt" else "gh"
+        here = self.dir / "here"
+        here.mkdir()
+        (here / exe).write_text("", encoding="utf-8")
+        os.chmod(str(here / exe), 0o755)
+        alias = str(self.dir / "alias")  # 指回 here 的 junction／symlink：路徑字串不同、實際是同一個資料夾
+        if os.name == "nt":
+            import _winapi
+            _winapi.CreateJunction(str(here), alias)
+        else:
+            os.symlink(str(here), alias)
+        env = {"PATH": alias, "PATHEXT": ".EXE"}
+        self.assertIsNone(core.find_gh(env=env, cwd=str(here)))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

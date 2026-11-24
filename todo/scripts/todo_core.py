@@ -488,7 +488,7 @@ def find_gh(env=None, cwd=None):
     """自己走一遍 PATH 找 gh 的絕對路徑：略過空項、`.` 和等於目前資料夾的項目，
     免得 Windows 在目前資料夾撿到惡意的 gh.exe。Windows 照 PATHEXT 試副檔名。找不到回 None。"""
     env = os.environ if env is None else env
-    here = os.path.normcase(os.path.abspath(cwd or os.getcwd()))
+    here = os.path.normcase(os.path.realpath(cwd or os.getcwd()))
     exts = [""]
     if os.name == "nt":
         exts = [e for e in (env.get("PATHEXT") or ".COM;.EXE;.BAT;.CMD").split(os.pathsep) if e]
@@ -497,7 +497,7 @@ def find_gh(env=None, cwd=None):
         if not d or d == ".":
             continue
         full = os.path.abspath(d)
-        if os.path.normcase(full) == here:
+        if os.path.normcase(os.path.realpath(full)) == here:  # realpath 解開 junction、symlink 指回目前資料夾的情況
             continue
         for ext in exts:
             cand = os.path.join(full, "gh" + ext)
@@ -570,7 +570,9 @@ def gh_identity(env=None):
     GH_TOKEN、GITHUB_TOKEN、GH_ENTERPRISE_TOKEN、GH_HOST 的 sha256。只存雜湊，不存 token。"""
     env = os.environ if env is None else env
     raw = "\0".join(env.get(k) or "" for k in ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GH_HOST"))
-    return "%s|%s" % (env.get("GH_CONFIG_DIR") or "default", hashlib.sha256(raw.encode("utf-8")).hexdigest())
+    cfg = env.get("GH_CONFIG_DIR")
+    where = "dir:" + cfg if cfg else "unset"  # 沒設與設成某個叫 default 的資料夾要分得開
+    return "%s|%s" % (where, hashlib.sha256(raw.encode("utf-8")).hexdigest())
 
 
 def gh_fetch(conf, runner=run_gh, now=None, budget=GH_TOTAL_BUDGET, clock=time.monotonic):
@@ -753,7 +755,14 @@ def write_json(obj, base, name, direct_fallback=True):
     target = base / name
     tmp = base / ("%s.%d.%s.tmp" % (name, os.getpid(), os.urandom(4).hex()))
     data = json.dumps(obj, ensure_ascii=False, indent=1)
-    tmp.write_text(data, encoding="utf-8")
+    try:
+        tmp.write_text(data, encoding="utf-8")
+    except BaseException:
+        try:
+            tmp.unlink()  # 寫到一半失敗也不留殘檔
+        except OSError:
+            pass
+        raise
     for _ in range(5):
         try:
             os.replace(str(tmp), str(target))
