@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -443,6 +443,160 @@ class LintHook(Tmp):
     def test_bad_input_still_exit_0(self):
         r = self.run_cli(LINT, stdin=b"not json")
         self.assertEqual((r.returncode, r.stdout), (0, b""))
+
+
+# ---- GitHub 選用功能：用假的 gh 執行器，不連網 ----
+
+def fake_gh(calls, fail=None):
+    """回傳假的 runner：記下每次的 args；fail 是 {第幾次: 例外}。"""
+    def runner(args, timeout):
+        calls.append(list(args))
+        if fail and len(calls) in fail:
+            raise fail[len(calls)]
+        if args[0] == "search":
+            return [{"number": 3, "title": "搜尋到的 %s" % args[1], "url": "https://github.com/o/r/issues/3",
+                     "repository": {"nameWithOwner": "o/r"}, "updatedAt": "2026-10-18T00:00:00Z"}]
+        return [{"number": 7, "title": "專案 %s" % args[0], "url": "https://github.com/o/r/%s/7" % args[0],
+                 "updatedAt": "2026-10-18T00:00:00Z"}]
+    return runner
+
+
+class GithubTests(Tmp):
+    def conf(self, enabled=True, repo="o/r", **gh):
+        proj = {"name": "示範", "root": str(self.dir / "proj"), "todo": ["TODO.md"]}
+        if repo:
+            proj["github"] = repo
+        extra = {"github": dict({"enabled": enabled}, **gh)} if enabled is not None else {}
+        self.write("proj/TODO.md", "- [ ] [你] 做事（建 10-17）\n")
+        return core.load_config(str(self.config([proj], **extra)), {"CLAUDE_CONFIG_DIR": str(self.dir)})
+
+    def test_success_writes_cache_and_index_merges_it(self):
+        calls = []
+        conf = self.conf()
+        self.assertTrue(core.gh_update(conf, self.dir, fake_gh(calls), datetime(2026, 10, 18, 9, 0)))
+        self.assertEqual([c[:3] for c in calls[:3]], [["search", "issues", "--assignee=@me"], ["search", "prs", "--assignee=@me"],
+                                                      ["search", "prs", "--review-requested=@me"]])
+        self.assertIn("--json", calls[0])
+        self.assertEqual(calls[3][:5], ["issue", "list", "-R", "o/r", "--state"])
+        self.assertEqual(calls[4][:2], ["pr", "list"])
+        cache = json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))
+        self.assertEqual(cache["fetched"], "2026-10-18T09:00:00")
+        self.assertIsNone(cache["error"])
+        self.assertEqual(cache["mine"]["assigned"][0], {"number": 3, "title": "搜尋到的 issues",
+                         "url": "https://github.com/o/r/issues/3", "updated": "2026-10-18T00:00:00Z", "repo": "o/r"})
+        self.assertEqual(cache["repos"]["o/r"]["issues"][0]["title"], "專案 issue")
+        idx = core.build(conf, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})
+        self.assertEqual(idx["github"]["fetched"], "2026-10-18T09:00:00")
+        self.assertEqual(idx["projects"][0]["github"], "o/r")
+        self.assertEqual(len(idx["github"]["repos"]["o/r"]["prs"]), 1)
+        out = core.render(idx, str(self.dir / "proj"))
+        self.assertIn("【GitHub】我的 指派 issue 1、指派 PR 1、等我審 1", out)
+        self.assertIn("- 示範｜o/r：issue 1、PR 1", out)
+
+    def test_disabled_never_calls_gh_and_index_has_no_github_key(self):
+        calls = []
+        for conf in (self.conf(enabled=False), self.conf(enabled=None)):
+            self.assertFalse(core.gh_update(conf, self.dir, fake_gh(calls)))
+            idx = core.build(conf, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})
+            self.assertNotIn("github", idx)
+            self.assertNotIn("github", idx["projects"][0])
+            self.assertNotIn("【GitHub】", core.render(idx))
+        self.assertEqual(calls, [])
+        self.assertFalse((self.dir / "gh_cache.json").exists())
+
+    def test_gh_not_found_stops_after_first_call_and_records_error(self):
+        calls = []
+        err = core.GhError("找不到 gh 指令", True)
+        core.gh_update(self.conf(), self.dir, fake_gh(calls, {1: err}))
+        self.assertEqual(len(calls), 1)
+        cache = json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))
+        self.assertEqual(cache["error"], "找不到 gh 指令")
+        self.assertEqual(cache["mine"]["assigned"], [])
+
+    def test_real_runner_maps_missing_timeout_nonzero_and_bad_json(self):
+        import subprocess as sp
+        from unittest import mock
+
+        with mock.patch.object(core.subprocess, "run", side_effect=FileNotFoundError()):
+            with self.assertRaises(core.GhError) as c:
+                core.run_gh(["x"])
+            self.assertTrue(c.exception.fatal)
+            self.assertIn("找不到 gh", str(c.exception))
+        with mock.patch.object(core.subprocess, "run", side_effect=sp.TimeoutExpired("gh", 10)):
+            with self.assertRaises(core.GhError) as c:
+                core.run_gh(["x"])
+            self.assertTrue(c.exception.fatal)
+            self.assertIn("逾時", str(c.exception))
+        bad = sp.CompletedProcess(["gh"], 4, b"", "gh auth login\n第二行".encode("utf-8"))
+        with mock.patch.object(core.subprocess, "run", return_value=bad):
+            with self.assertRaises(core.GhError) as c:
+                core.run_gh(["x"])
+            self.assertFalse(c.exception.fatal)
+            self.assertEqual(str(c.exception), "gh 結束碼 4：gh auth login")
+        junk = sp.CompletedProcess(["gh"], 0, b"<html>", b"")
+        with mock.patch.object(core.subprocess, "run", return_value=junk):
+            with self.assertRaisesRegex(core.GhError, "不是 JSON"):
+                core.run_gh(["x"])
+
+    def test_timeout_and_nonzero_through_gh_update_are_recorded(self):
+        calls = []
+        core.gh_update(self.conf(), self.dir, fake_gh(calls, {1: core.GhError("gh 逾時（10 秒）", True)}))
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))["error"], "gh 逾時（10 秒）")
+
+    def test_nonzero_exit_on_one_repo_keeps_other_data(self):
+        calls = []
+        core.gh_update(self.conf(), self.dir, fake_gh(calls, {4: core.GhError("gh 結束碼 1：HTTP 404")}))
+        cache = json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(calls), 5)  # 非致命：同一個 repo 的 PR 照樣試
+        self.assertEqual(cache["error"], "gh 結束碼 1：HTTP 404")
+        self.assertEqual(cache["repos"]["o/r"]["issues"], [])
+        self.assertEqual(len(cache["repos"]["o/r"]["prs"]), 1)
+        self.assertEqual(len(cache["mine"]["assigned"]), 1)
+
+    def test_fresh_cache_skips_call_and_stale_or_changed_repo_refetches(self):
+        conf = self.conf(ttlMinutes=10)
+        t0 = datetime(2026, 10, 18, 9, 0)
+        calls = []
+        self.assertTrue(core.gh_update(conf, self.dir, fake_gh(calls), t0))
+        n = len(calls)
+        self.assertFalse(core.gh_update(conf, self.dir, fake_gh(calls), t0 + timedelta(minutes=9)))
+        self.assertEqual(len(calls), n)
+        self.assertTrue(core.gh_update(conf, self.dir, fake_gh(calls), t0 + timedelta(minutes=11)))
+        self.assertEqual(len(calls), 2 * n)
+        other = self.conf(repo="o/other")
+        self.assertTrue(core.gh_update(other, self.dir, fake_gh(calls), t0 + timedelta(minutes=12)))
+
+    def test_error_cache_is_also_fresh_so_a_missing_gh_is_not_retried_every_time(self):
+        calls = []
+        conf = self.conf()
+        t0 = datetime(2026, 10, 18, 9, 0)
+        core.gh_update(conf, self.dir, fake_gh(calls, {1: core.GhError("找不到 gh 指令", True)}), t0)
+        self.assertFalse(core.gh_update(conf, self.dir, fake_gh(calls), t0 + timedelta(minutes=1)))
+        self.assertEqual(len(calls), 1)
+
+    def test_cli_gh_without_gh_installed_is_silent_and_index_stdout_stays_empty(self):
+        self.conf()
+        env = dict(os.environ, CLAUDE_CONFIG_DIR=str(self.dir), PATH=str(self.dir / "empty"), PYTHONIOENCODING="utf-8")
+        for cmd in ("gh", "index"):
+            r = subprocess.run([sys.executable, CORE, cmd], capture_output=True, env=env, stdin=subprocess.DEVNULL)
+            self.assertEqual((r.returncode, r.stdout, r.stderr), (0, b"", b""))
+        cache = json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))
+        self.assertEqual(cache["error"], "找不到 gh 指令")
+        idx = json.loads((self.dir / "todo_index.json").read_text(encoding="utf-8"))
+        self.assertEqual(idx["github"]["error"], "找不到 gh 指令")
+
+    def test_index_without_cache_shows_never_fetched(self):
+        conf = self.conf()
+        idx = core.build(conf, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})
+        self.assertIsNone(idx["github"]["fetched"])
+        self.assertIn("【GitHub】還沒抓過", core.render(idx))
+
+    def test_bad_repo_name_and_bad_ttl_fall_back(self):
+        self.assertIsNone(core.github_repo("not a repo"))
+        self.assertEqual(core.github_repo(" o/r "), "o/r")
+        self.assertEqual(core.github_conf({"enabled": "yes", "ttlMinutes": -1}), {"enabled": False, "ttlMinutes": 10})
+        self.assertEqual(core.github_conf({"enabled": True, "ttlMinutes": 30}), {"enabled": True, "ttlMinutes": 30})
 
 
 if __name__ == "__main__":

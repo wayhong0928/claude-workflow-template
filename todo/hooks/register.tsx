@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { PaneData, PaneView, TodoConfig, TodoIndex } from '../types'
+import type { GhRow, PaneData, PaneView, TodoConfig, TodoIndex } from '../types'
 import {
   HINT,
   hintData,
@@ -46,6 +46,7 @@ export function viewsOf(want: unknown): [PaneView, string][] {
   const list = [...new Set(ids)].map(id => VIEWS.find(x => x[0] === id)!)
   return list.length ? list : VIEWS
 }
+const GH_CAP = 20 // 每組最多列幾條，其餘寫「還有 n 條」
 const GROUP_NAME: Record<string, string> = { 你: '你的待辦', Claude: 'Claude 的待辦', 等外部: '等外部', Goal: '已加入 goal 計畫' }
 const WHO: Record<string, string> = { 待你決定: '決定', 等外部: '等' }
 
@@ -149,7 +150,7 @@ export const register: Register = on => {
   // 四種版面，側欄頂端按 1～4 切換（先 ctrl+x tab 把鍵盤交給側欄），也可以打 /todo view <名>。
   // mine：待你決定 → 你 → 下一步 → goal 進度 → 等外部 → Claude。project：各專案全展開。time：照期限。goal：計畫逐步列。
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const { Box, Button, Link, Text } = $.ui.resolve(e)
     const d = await read($, pane)
     if (!d) return <Text dimColor>讀取 TODO 中…</Text>
     if (d.hint) return <Text dimColor>{d.hint}</Text>
@@ -173,6 +174,24 @@ export const register: Register = on => {
         </Box>
       </Box>
     )
+    // GitHub 的條目：點了開網頁，只讀不改
+    const linkRow = (key: string, r: GhRow) => (
+      <Box key={key} flexDirection="row">
+        <Text dimColor>○ </Text>
+        <Box flexShrink={1}>
+          <Text wrap="truncate-end">
+            <Link href={r.url} label={r.text} />
+          </Text>
+        </Box>
+      </Box>
+    )
+    const linkRows = (key: string, rows: GhRow[]) => (
+      <Box flexDirection="column">
+        {rows.slice(0, GH_CAP).map((r, j) => linkRow(`${key}-${j}`, r))}
+        {rows.length > GH_CAP && <Text dimColor>{`  還有 ${rows.length - GH_CAP} 條，到 GitHub 看`}</Text>}
+      </Box>
+    )
+    const ghNote = d.github && <Text dimColor wrap="truncate-end">{d.github.note}</Text>
     const head = (key: string, left: number | undefined, text: string) => (
       <Box key={key} flexDirection="row">
         {left !== undefined && <Text color={badgeColor(left)}>{badge(left)}</Text>}
@@ -236,6 +255,19 @@ export const register: Register = on => {
               </Box>
             )
           })}
+          {d.github && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text bold color="claude">{`GitHub（我的）（${d.github.mine.reduce((n, m) => n + m.rows.length, 0)}）`}</Text>
+              {d.github.mine.map(m => (
+                <Box key={m.label} flexDirection="column" paddingLeft={2}>
+                  <Text color="claude">{`${m.label}（${m.rows.length}）`}</Text>
+                  {linkRows(`gm-${m.label}`, m.rows)}
+                </Box>
+              ))}
+              {d.github.mine.length === 0 && <Text dimColor>  沒有</Text>}
+              {ghNote}
+            </Box>
+          )}
           {waiting.total > 0 && (
             <Box flexDirection="column" marginTop={1}>
               <Text bold color="claude">{`等外部（${waiting.total}）`}</Text>
@@ -262,9 +294,24 @@ export const register: Register = on => {
 
     const projectView = () => {
       const all = byProject(d.projects, d.goals)
+      const gh = d.github?.projects ?? []
+      const extra = gh.filter(g => !all.some(p => p.name === g.name))
+      // 專案底下接著列 GitHub 的 issue 與 PR（只有設了 github 的專案才有）
+      const ghOf = (name: string) => {
+        const g = gh.find(x => x.name === name)
+        if (!g) return null
+        return (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold>{`GitHub ${g.repo}｜issue ${g.issues.length}、PR ${g.prs.length}`}</Text>
+            {g.error && <Text dimColor wrap="truncate-end">{`  略過：${g.error}`}</Text>}
+            {linkRows(`gi-${name}`, g.issues)}
+            {linkRows(`gp-${name}`, g.prs.map(r => ({ ...r, text: `PR ${r.text}` })))}
+          </Box>
+        )
+      }
       return (
         <Box flexDirection="column">
-          {all.length === 0 && <Text dimColor>沒有未完成的條目</Text>}
+          {all.length === 0 && extra.length === 0 && <Text dimColor>沒有未完成的條目</Text>}
           {all.map((p, k) => (
             <Box key={p.name} flexDirection="column" marginTop={k === 0 ? 0 : 2}>
               <Text bold color="claude">{`■ ${p.name}（${p.groups.reduce((n, g) => n + g.rows.length, 0)}）`}</Text>
@@ -274,8 +321,16 @@ export const register: Register = on => {
                   {g.rows.map((r, j) => row(`${g.tag}${j}`, r.left, r.text))}
                 </Box>
               ))}
+              {ghOf(p.name)}
             </Box>
           ))}
+          {extra.map((g, k) => (
+            <Box key={`extra-${g.name}`} flexDirection="column" marginTop={all.length === 0 && k === 0 ? 0 : 2}>
+              <Text bold color="claude">{`■ ${g.name}（0）`}</Text>
+              {ghOf(g.name)}
+            </Box>
+          ))}
+          {ghNote && <Box marginTop={1}>{ghNote}</Box>}
         </Box>
       )
     }

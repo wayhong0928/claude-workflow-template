@@ -6,6 +6,7 @@
 |---|---|---|
 | 開場清單（注入 session 開頭的 context） | command hook 跑 `todo_core.py render` | SessionStart |
 | 重產 `todo_index.json` | command hook 跑 `todo_core.py index` | SessionStart、Edit／Write 之後、每次送出提示 |
+| 抓 GitHub 寫 `gh_cache.json`（選用，預設關） | command hook 跑 `todo_core.py gh` | SessionStart |
 | 第一行格式檢查，只警告、不擋 | command hook 跑 `todo_lint.py` | Edit／Write 改到設定檔列的 TODO 時 |
 | `/todo` 指令、TODO 側欄、輸入框上方的下一步 | mod（`hooks/register.tsx`） | 一直在 |
 
@@ -51,14 +52,38 @@
 | `maxFirstLine` | 60 | 第一行扣掉欄位括號後的字數上限 |
 | `wslPrefix` | `/mnt` | 在 WSL 裡把 `E:/x` 換成 `/mnt/e/x`；寫 `/mnt` 或 `/mnt/d` 都可以 |
 | `planGlob` | `計畫_*.md` | goal 計畫檔的檔名樣式 |
+| `github.enabled` | `false` | 設 `true` 才追蹤 GitHub，見下面「GitHub 追蹤」。不開就完全不呼叫 `gh` |
+| `github.ttlMinutes` | 10 | `gh_cache.json` 幾分鐘內算新鮮，新鮮就不連網 |
 | `views` | 四種全開 | 側欄顯示哪些版面、照什麼順序。寫代號 `mine`、`project`、`time`、`goal`，也認分頁上的短名稱「你」「專案」「時間」「Goal」，例如 `["mine", "goal"]`；按鍵照這個順序編 1、2…。不認得的值會略過，全部不認得就四種全開 |
 | `projects[].name` | 資料夾名 | 顯示用的專案名 |
 | `projects[].root` | 必填 | 專案資料夾，可以寫 `~` |
 | `projects[].todo` | `["TODO.md"]` | TODO 檔，相對 `root`；可以列好幾個 |
 | `projects[].log` | 不設 | session_log，相對 `root`；不設就不顯示這個專案的下一步 |
+| `projects[].github` | 不設 | 這個專案對應的 GitHub repo，寫成 `owner/repo`；要 `github.enabled` 才有用 |
 | `projects[].skipDirs` | `[]` | 找計畫檔與有效期檔時不進去的資料夾名稱，例如書庫、概念卡這類大量內容資料夾 |
 
 設定檔列了但讀不到的 TODO，`lint` 會報「讀不到」，不會當成空清單略過。
+
+## GitHub 追蹤（選用）
+
+預設關閉。要用的話先裝好 [GitHub CLI](https://cli.github.com/) 並登入（`gh auth login`），設定檔加上：
+
+```json
+{
+  "github": { "enabled": true, "ttlMinutes": 10 },
+  "projects": [
+    { "name": "my-thesis", "root": "~/projects/my-thesis", "github": "owner/repo" }
+  ]
+}
+```
+
+- 跨 repo 的「我的」：`gh search issues --assignee=@me`、`gh search prs --assignee=@me`、`gh search prs --review-requested=@me`，各取開著的前 50 條。
+- 各專案：有 `projects[].github` 的，用 `gh issue list -R owner/repo` 與 `gh pr list -R owner/repo` 取開著的前 50 條。
+- `todo_core.py gh` 在 SessionStart 跑，把結果寫進設定資料夾的 `gh_cache.json`；快取比 `ttlMinutes` 新、而且 repo 清單沒變，就不連網。每次呼叫 `gh` 最多 10 秒，一次 `gh` 指令總共最多 45 秒。這個 hook 與 `index`、`render` 同時跑，所以第一次抓到的資料要到下一次 `index`（下一次送出提示）才出現。
+- `index` 與 `render` 只讀 `gh_cache.json`，從不連網，所以不會拖慢送出提示。
+- 側欄「你」頁多一節「GitHub（我的）」，「專案」頁在設了 `github` 的專案底下列 issue 與 PR，旁邊一行淡色字標快取是多久前更新的。條目點了開網頁，側欄只讀不改，關 issue 之類仍在 GitHub 做。開場清單多一段「GitHub」，每個設了 `github` 的專案一行條數。
+- 沒裝 `gh`、沒登入、逾時、連不上、輸出不是 JSON：安靜跳過，`index` 的 stdout 一樣零輸出，錯誤字串記在 `gh_cache.json` 的 `error`，側欄顯示一行淡色說明。錯誤也算一次快取，所以沒裝 `gh` 時不會每次開 session 都重試。
+- 沒開 `github.enabled` 時，`todo_index.json` 跟沒有這個功能時逐位元相同。
 
 ## 讀哪些檔、寫哪些檔
 
@@ -69,9 +94,9 @@
 
 寫：
 
-- 只有 `todo_core.py index` 寫一個檔：設定資料夾裡的 `todo_index.json`。
+- 只有 `todo_core.py index` 與 `todo_core.py gh` 寫檔：設定資料夾裡的 `todo_index.json`，以及開了 GitHub 追蹤時的 `gh_cache.json`。
 - TODO、session_log、計畫檔、有效期檔都只讀。檔頭的到期日過了，開場清單只提醒，不移動、不修改任何檔。
-- mod 不寫任何檔，只讀設定檔與 `todo_index.json`。
+- mod 不寫任何檔，只讀設定檔與 `todo_index.json`（GitHub 資料已經併在裡面）。
 
 ## 畫面與指令
 
@@ -137,6 +162,7 @@ TODO 條目的 `（計畫 檔名）` 欄位，或文字裡出現符合 `planGlob
 ## 安全
 
 - mod 在 Claude Code 的行程內執行，不受沙箱限制。這個 mod 只讀設定資料夾裡的兩個檔（`todo.config.json`、`todo_index.json`），讀的環境變數只有 `CLAUDE_CONFIG_DIR`、`HOME`、`USERPROFILE`、`WSL_DISTRO_NAME`，不寫檔、不連網、不開行程。`claude plugin validate ./todo` 會列出它實際呼叫的 API，可以自己核對。
+- 開了 GitHub 追蹤時，`todo_core.py gh` 會執行 `gh` 指令（用你自己登入的帳號，只讀 issue 與 PR，不寫），這是整個 plugin 唯一會連網的部分；不開就完全不執行。
 - Python 腳本照一般 command hook 的權限執行，讀寫範圍見上一節。
 
 ## 開發

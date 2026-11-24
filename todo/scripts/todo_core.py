@@ -5,21 +5,31 @@
   python todo_core.py index  [--config 設定檔]        寫出 todo_index.json，stdout 不印任何東西
   python todo_core.py lint   [--config 設定檔] [檔...]  印格式問題，有問題 exit 1
   python todo_core.py render [--config 設定檔]        印開場清單（10,000 字元內）
+  python todo_core.py gh     [--config 設定檔]        github.enabled 時抓 GitHub 寫 gh_cache.json，stdout 不印任何東西
 
-設定檔預設在 ${CLAUDE_CONFIG_DIR:-~/.claude}/todo.config.json，index 寫在同一個資料夾。
-這支腳本只讀 TODO、計畫檔與 session_log，除了 index 不寫、不搬、不改任何檔。
+設定檔預設在 ${CLAUDE_CONFIG_DIR:-~/.claude}/todo.config.json，index 與 gh_cache.json 寫在同一個資料夾。
+這支腳本只讀 TODO、計畫檔與 session_log，除了 index 與 gh 不寫、不搬、不改任何檔。
+只有 gh 會連網（呼叫 gh 指令）；index 與 render 只讀 gh_cache.json。
 """
 import fnmatch
 import json
 import os
 import re
+import subprocess
 import sys
+import time
 from datetime import date, datetime
 from pathlib import Path
 
 INDEX_VERSION = 1
 CONFIG_NAME = "todo.config.json"
 INDEX_NAME = "todo_index.json"
+GH_CACHE_NAME = "gh_cache.json"
+GH_CACHE_VERSION = 1
+GH_TTL_MINUTES = 10
+GH_CALL_TIMEOUT = 10  # 每次呼叫 gh 的秒數上限
+GH_TOTAL_BUDGET = 45  # 一次 gh 指令最多花幾秒，超過就不再發新的呼叫
+GH_LIMIT = 50
 DEFAULTS = {"home": None, "dueSoonDays": 7, "staleDays": 14, "maxFirstLine": 60,
             "wslPrefix": "/mnt", "planGlob": "計畫_*.md"}
 RENDER_LIMIT = 10000
@@ -115,6 +125,23 @@ class ConfigMissing(Exception):
     pass
 
 
+GH_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def github_repo(value):
+    """projects[].github：只收 owner/repo 的樣子，其他一律當沒設。"""
+    v = value.strip() if isinstance(value, str) else ""
+    return v if GH_REPO.match(v) else None
+
+
+def github_conf(raw):
+    """github 設定：enabled 預設 false；ttlMinutes 預設 10，不是正數就用預設。"""
+    raw = raw if isinstance(raw, dict) else {}
+    ttl = raw.get("ttlMinutes")
+    ok = isinstance(ttl, (int, float)) and not isinstance(ttl, bool) and ttl > 0
+    return {"enabled": raw.get("enabled") is True, "ttlMinutes": ttl if ok else GH_TTL_MINUTES}
+
+
 def load_config(path=None, env=None):
     """讀設定檔，補上預設值，專案路徑全部換成絕對路徑（已展開 ~ 與 WSL）。"""
     env = os.environ if env is None else env
@@ -138,8 +165,10 @@ def load_config(path=None, env=None):
             "todo": [expand(join(root, t), env, wsl) for t in todo],
             "log": expand(join(root, p["log"]), env, wsl) if p.get("log") else None,
             "skipDirs": [str(d) for d in p.get("skipDirs", [])],
+            "github": github_repo(p.get("github")),
         })
     conf["projects"] = projects
+    conf["github"] = github_conf(raw.get("github"))
     conf["_path"] = str(cfg).replace("\\", "/")
     conf["_wsl"] = wsl
     if not conf.get("home") and projects:
@@ -444,12 +473,157 @@ def resolve_plan(ref, todo_path, root, plans):
     return sorted(found, key=len)[0] if found else None
 
 
+# ---------- GitHub（選用，github.enabled 才會動） ----------
+
+class GhError(Exception):
+    """gh 呼叫失敗。fatal 表示後面的呼叫也不用試了（沒裝、逾時）。"""
+
+    def __init__(self, msg, fatal=False):
+        Exception.__init__(self, msg)
+        self.fatal = fatal
+
+
+def run_gh(args, timeout=GH_CALL_TIMEOUT):
+    """呼叫 gh，回傳解析好的 JSON。任何失敗都丟 GhError，錯誤訊息只留短短一行。"""
+    try:
+        r = subprocess.run(["gh"] + list(args), stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout)
+    except FileNotFoundError:
+        raise GhError("找不到 gh 指令", True)
+    except subprocess.TimeoutExpired:
+        raise GhError("gh 逾時（%d 秒）" % timeout, True)
+    except OSError as e:
+        raise GhError("gh 執行失敗：%s" % e, True)
+    if r.returncode != 0:
+        err = r.stderr.decode("utf-8", errors="replace").strip().splitlines()
+        raise GhError("gh 結束碼 %d%s" % (r.returncode, "：" + err[0][:120] if err else ""))
+    try:
+        return json.loads(r.stdout.decode("utf-8", errors="replace"))
+    except ValueError:
+        raise GhError("gh 輸出不是 JSON")
+
+
+def gh_row(raw):
+    """gh 的一筆 issue／PR 縮成側欄要的欄位；repo 只有 search 才有。"""
+    repo = raw.get("repository")
+    repo = repo.get("nameWithOwner") if isinstance(repo, dict) else None
+    row = {"number": raw.get("number"), "title": plain(str(raw.get("title") or "")),
+           "url": str(raw.get("url") or ""), "updated": str(raw.get("updatedAt") or "")}
+    if repo:
+        row["repo"] = repo
+    return row
+
+
+def gh_rows(data):
+    if not isinstance(data, list):
+        raise GhError("gh 輸出不是清單")
+    return [gh_row(x) for x in data if isinstance(x, dict) and x.get("url")]
+
+
+SEARCH_FIELDS = "number,title,url,repository,updatedAt"
+LIST_FIELDS = "number,title,url,updatedAt"
+GH_MINE = [
+    ("assigned", ["search", "issues", "--assignee=@me", "--state=open"]),
+    ("prs", ["search", "prs", "--assignee=@me", "--state=open"]),
+    ("review", ["search", "prs", "--review-requested=@me", "--state=open"]),
+]
+
+
+def gh_repos(conf):
+    seen = []
+    for p in conf["projects"]:
+        if p.get("github") and p["github"] not in seen:
+            seen.append(p["github"])
+    return seen
+
+
+def gh_fetch(conf, runner=run_gh, now=None, budget=GH_TOTAL_BUDGET):
+    """連網抓一次，回傳要寫進 gh_cache.json 的 dict。runner(args, timeout) 回傳 JSON，失敗丟 GhError；測試傳假的進來。"""
+    now = now or datetime.now()
+    cache = {"version": GH_CACHE_VERSION, "fetched": now.isoformat(timespec="seconds"), "error": None,
+             "mine": {"assigned": [], "prs": [], "review": []}, "repos": {}}
+    started = time.monotonic()
+    state = {"stop": False}
+
+    def call(args, fields):
+        if state["stop"]:
+            return None, None
+        if time.monotonic() - started > budget:
+            state["stop"] = True
+            return None, "gh 總時間超過 %d 秒" % budget
+        try:
+            return gh_rows(runner(args + ["--limit", str(GH_LIMIT), "--json", fields], GH_CALL_TIMEOUT)), None
+        except GhError as e:
+            state["stop"] = state["stop"] or e.fatal
+            return None, str(e)
+
+    def note(msg):
+        if msg and cache["error"] is None:
+            cache["error"] = msg
+
+    for key, args in GH_MINE:
+        rows, err = call(args, SEARCH_FIELDS)
+        cache["mine"][key] = rows or []
+        note(err)
+    for repo in gh_repos(conf):
+        ent = {"issues": [], "prs": [], "error": None}
+        for key, sub in (("issues", "issue"), ("prs", "pr")):
+            rows, err = call([sub, "list", "-R", repo, "--state", "open"], LIST_FIELDS)
+            ent[key] = rows or []
+            ent["error"] = ent["error"] or err
+        note(ent["error"])
+        cache["repos"][repo] = ent
+    return cache
+
+
+def read_gh_cache(base):
+    try:
+        data = json.loads((base / GH_CACHE_NAME).read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) and data.get("version") == GH_CACHE_VERSION else None
+
+
+def gh_fresh(cache, conf, now=None):
+    """快取沒過期、而且抓的 repo 跟設定一致，就不用連網。"""
+    if not cache:
+        return False
+    try:
+        age = ((now or datetime.now()) - datetime.fromisoformat(cache["fetched"])).total_seconds()
+    except (KeyError, TypeError, ValueError):
+        return False
+    same = sorted((cache.get("repos") or {}).keys()) == sorted(gh_repos(conf))
+    return same and 0 <= age < conf["github"]["ttlMinutes"] * 60
+
+
+def gh_update(conf, base, runner=run_gh, now=None):
+    """gh 指令本體：沒開 github 就什麼都不做；快取新鮮就不呼叫 gh。回傳是否真的連了網。"""
+    if not conf["github"]["enabled"]:
+        return False
+    if gh_fresh(read_gh_cache(base), conf, now):
+        return False
+    write_json(gh_fetch(conf, runner, now), base, GH_CACHE_NAME)
+    return True
+
+
+def gh_index(conf, base):
+    """index 與 render 用：把快取原樣併進來，不連網。沒開 github 回傳 None（index 完全不多一個鍵）。"""
+    if not conf["github"]["enabled"]:
+        return None
+    cache = read_gh_cache(base) or {}
+    mine = cache.get("mine") if isinstance(cache.get("mine"), dict) else {}
+    return {"enabled": True, "fetched": cache.get("fetched"), "error": cache.get("error"),
+            "mine": {k: list(mine.get(k) or []) for k, _ in GH_MINE}, "repos": cache.get("repos") or {}}
+
+
 # ---------- index ----------
 
 def build(conf, today, env=None):
     index = {"version": INDEX_VERSION, "generated": datetime.now().isoformat(timespec="seconds"),
              "today": today.isoformat(), "config": conf.get("_path"), "home": conf.get("home"),
              "dueSoonDays": conf["dueSoonDays"], "projects": [], "goals": [], "expiring": [], "problems": []}
+    gh = gh_index(conf, config_dir(env))
+    if gh is not None:
+        index["github"] = gh
     plan_cache, goal_refs = {}, []
     seen_exp = set()
     for p in conf["projects"]:
@@ -473,8 +647,11 @@ def build(conf, today, env=None):
                 nxt = latest_next(read_text(p["log"]))
             except OSError:
                 nxt = None
-        index["projects"].append({"name": p["name"], "root": p["root"], "todo": p["todo"], "log": p["log"],
-                                  "items": items, "next": nxt})
+        entry = {"name": p["name"], "root": p["root"], "todo": p["todo"], "log": p["log"],
+                 "items": items, "next": nxt}
+        if gh is not None and p.get("github"):
+            entry["github"] = p["github"]
+        index["projects"].append(entry)
         for path, fm in exp:
             if norm_key(path) in seen_exp:
                 continue
@@ -522,10 +699,14 @@ def build(conf, today, env=None):
 
 
 def write_index(index, base):
+    write_json(index, base, INDEX_NAME)
+
+
+def write_json(obj, base, name):
     base.mkdir(parents=True, exist_ok=True)
-    target = base / INDEX_NAME
-    tmp = base / (INDEX_NAME + ".tmp")
-    data = json.dumps(index, ensure_ascii=False, indent=1)
+    target = base / name
+    tmp = base / (name + ".tmp")
+    data = json.dumps(obj, ensure_ascii=False, indent=1)
     tmp.write_text(data, encoding="utf-8")
     for _ in range(5):
         try:
@@ -618,10 +799,26 @@ def render(index, cwd=None):
                 if i["due"] and left_of(i["due"], today) <= soon_days]
         soon.sort(key=lambda x: x[1]["due"])
         out += ["- %s［%s］%s%s" % (n, dict(GROUPS).get(i["who"], i["who"]), i["text"], mark(i, today)) for n, i in soon] or ["- 沒有"]
+    gh = index.get("github")
+    if gh:
+        out += ["", "【GitHub】" + gh_summary(gh)]
+        for p in projects:
+            if p.get("github"):
+                r = (gh.get("repos") or {}).get(p["github"]) or {}
+                out.append("- %s｜%s：issue %d、PR %d" % (p["name"], p["github"], len(r.get("issues") or []), len(r.get("prs") or [])))
     probs = index.get("problems", [])
     if probs:
         out += ["", "【TODO 格式】%d 條問題，跑 `python <plugin>/scripts/todo_core.py lint` 看明細" % len(probs)]
     return cap("\n".join(out))
+
+
+def gh_summary(gh):
+    m = gh.get("mine") or {}
+    if not gh.get("fetched"):
+        return "還沒抓過" + ("（上次錯誤：%s）" % gh["error"] if gh.get("error") else "")
+    err = "；有錯誤略過：%s" % gh["error"] if gh.get("error") else ""
+    return "我的 指派 issue %d、指派 PR %d、等我審 %d%s" % (
+        len(m.get("assigned") or []), len(m.get("prs") or []), len(m.get("review") or []), err)
 
 
 def cap(text, limit=RENDER_LIMIT):
@@ -708,6 +905,15 @@ def main(argv=None):
             emit("todo plugin：設定檔不是合法的 JSON（%s），開場清單先略過。\n" % e)
             return 0
         emit(render(build(conf, date.today()), cwd or os.getcwd()) + "\n")
+        return 0
+    if cmd == "gh":
+        # 同樣 stdout 零輸出（SessionStart 的 stdout 會進對話）；任何失敗都安靜，錯誤記在 gh_cache.json。
+        try:
+            gh_update(load_config(config), config_dir())
+        except ConfigMissing:
+            pass
+        except Exception as e:  # noqa: BLE001
+            sys.stderr.write("todo_core gh 失敗：%s\n" % e)
         return 0
     if cmd == "index":
         # stdout 一個字都不印：UserPromptSubmit 的 stdout 會進對話。失敗也 exit 0，不擋使用者送出。

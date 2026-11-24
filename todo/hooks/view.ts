@@ -2,9 +2,11 @@
 import type {
   GoalPlan,
   GoalTodo,
+  IndexGhRow,
   IndexItem,
   NextStep,
   PaneData,
+  PaneGithub,
   PaneProject,
   PaneRow,
   TodoConfig,
@@ -204,6 +206,55 @@ export function nextOf(index: TodoIndex, at: string | undefined, home: string | 
   return own?.next ? { project: own.name, ...own.next } : null
 }
 
+// ---- GitHub（選用）：只讀 index 裡併進來的 gh_cache.json ----
+export function ago(from: Date, now: Date): string {
+  const min = Math.max(0, Math.round((now.getTime() - from.getTime()) / 60_000))
+  if (min < 1) return '剛剛'
+  if (min < 60) return `${min} 分鐘前`
+  if (min < 1440) return `${Math.floor(min / 60)} 小時前`
+  return `${Math.floor(min / 1440)} 天前`
+}
+
+const ghRow = (r: IndexGhRow, withRepo: boolean) => ({ text: `${withRepo && r.repo ? r.repo : ''}#${r.number} ${r.title}`, url: r.url })
+export const GH_MINE: [keyof NonNullable<TodoIndex['github']>['mine'], string][] = [
+  ['assigned', '指派給我的 issue'],
+  ['prs', '指派給我的 PR'],
+  ['review', '等我審的 PR'],
+]
+
+// index 沒有 github（沒開）就回 undefined，畫面完全不多東西。專案那邊跟 paneData 一樣：在其他專案開 session 只列那個專案。
+export function githubOf(index: TodoIndex, at: string | undefined, home: string | undefined, now: Date): PaneGithub | undefined {
+  const g = index.github
+  if (!g) return undefined
+  const fetched = g.fetched ? new Date(g.fetched) : undefined
+  const when = fetched && !Number.isNaN(fetched.getTime()) ? fetched : undefined
+  const note = when
+    ? `GitHub ${ago(when, now)}更新${g.error ? `，有略過：${g.error}` : ''}`
+    : g.error
+      ? `GitHub 還沒抓到：${g.error}`
+      : 'GitHub 還沒抓過，開新 session 時會抓'
+  const only = at && at !== home
+  const projects = index.projects
+    .filter(p => p.github && (!only || p.name === at))
+    .sort((a, b) => Number(b.name === at) - Number(a.name === at))
+    .map(p => {
+      const r = g.repos?.[p.github!]
+      const out: PaneGithub['projects'][number] = {
+        name: p.name,
+        repo: p.github!,
+        issues: (r?.issues ?? []).map(x => ghRow(x, false)),
+        prs: (r?.prs ?? []).map(x => ghRow(x, false)),
+      }
+      if (r?.error) out.error = r.error
+      return out
+    })
+  return {
+    note,
+    mine: GH_MINE.map(([k, label]) => ({ label, rows: (g.mine?.[k] ?? []).map(x => ghRow(x, true)) })).filter(m => m.rows.length > 0),
+    projects,
+  }
+}
+
 // 在 home 專案或不在任何專案底下開 session：列全部專案，所在專案排第一。
 // 在其他專案開：只列那個專案自己的，goal 計畫也只列跟它有關的。
 export function paneData(index: TodoIndex, today: Date, at: string | undefined, home: string | undefined, now: Date = today): PaneData {
@@ -227,11 +278,13 @@ export function paneData(index: TodoIndex, today: Date, at: string | undefined, 
   const picked = only
     ? rest.filter(([p]) => p === at)
     : [...rest.filter(([p]) => p === at), ...rest.filter(([p, items]) => p !== at && items.length > 0)]
+  const github = githubOf(index, at, home, now)
   return {
     date: stamp(now),
     next: nextOf(index, at, home),
     goals: only ? goals.filter(g => g.project === at || g.from.includes(at)) : goals,
     projects: picked.map(([p, items]) => paneProject(p, items, today)),
+    ...(github ? { github } : {}),
   }
 }
 
