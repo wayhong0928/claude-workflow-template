@@ -9,7 +9,8 @@
 - 新增選用的 GitHub 追蹤，預設關閉（`github.enabled: false`），不開就完全不呼叫 `gh`，`todo_index.json` 跟改版前逐位元相同。
 - 開了之後，側欄「你」頁多一節 GitHub（我的）：指派給我的 issue、指派給我的 PR、等我審的 PR（跨 repo，用 `gh search`）。「專案」頁在設了 `projects[].github`（`owner/repo`）的專案底下列開著的 issue 與 PR，點了開網頁，只讀不改。開場清單每個設了 `github` 的專案多一行條數。
 - 新指令 `todo_core.py gh`：SessionStart 時跑，結果寫進 `gh_cache.json`（放 `todo_index.json` 旁）。快取沒超過 `github.ttlMinutes`（預設 10 分鐘）就不連網；每次呼叫 `gh` 最多 10 秒。`index` 與 `render` 只讀快取，從不連網。
-- 沒裝 `gh`、沒登入、逾時、連不上時安靜跳過：`index` 照常、stdout 維持零輸出，錯誤記在快取裡，側欄多一行淡色說明。
+- 沒裝 `gh`、沒登入、逾時、連不上時安靜跳過：`index` 照常、stdout 維持零輸出，錯誤只記固定類別（不存 `gh` 輸出文字，免得帶出本機路徑或憑證），側欄多一行淡色說明。
+- 自己走 `PATH` 找 `gh` 的絕對路徑，略過空項、`.` 與目前資料夾，子行程在設定資料夾執行。快取記著 GitHub 身分（只存雜湊），換帳號就視為過期、不顯示別的身分的資料；設定裡拿掉的 repo 不會再併進 index；快取用每個行程獨有的暫存檔寫入，同時開的 session 不會互踩；每次呼叫的逾時取 10 秒與剩餘總預算（45 秒）的較小值。
 - `hooks.json` 的 SessionStart 多一個 `gh` command hook（它和 `index`、`render` 同時跑，第一次抓到的資料下一次 `index` 才併進來）。
 
 ## 1.1.0（workflow-kit）、0.9.0（todo）

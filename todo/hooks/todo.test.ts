@@ -480,6 +480,8 @@ test('GitHub：錯誤或還沒抓過時只多一行說明；在其他專案開 s
   expect(githubOf(withGh(GH({ fetched: null })), 'notes', 'notes', NOW)!.note).toContain('還沒抓過')
   expect(githubOf(withGh(GH({ error: 'gh 逾時（10 秒）' })), 'notes', 'notes', NOW)!.note).toBe('GitHub 10 分鐘前更新，有略過：gh 逾時（10 秒）')
   expect(githubOf(withGh(GH()), 'thesis', 'notes', NOW)!.projects).toEqual([])
+  // 設定改成別的 repo、快取裡沒有它的資料：這個專案什麼都不列
+  expect(githubOf(withGh(GH({ repos: {} })), 'notes', 'notes', NOW)!.projects).toEqual([])
   expect(ago(new Date(2026, 9, 18, 6, 0), NOW)).toBe('3 小時前')
   expect(ago(new Date(2026, 9, 16, 6, 0), NOW)).toBe('2 天前')
 })

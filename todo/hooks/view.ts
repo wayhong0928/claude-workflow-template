@@ -235,7 +235,7 @@ export function githubOf(index: TodoIndex, at: string | undefined, home: string 
       : 'GitHub 還沒抓過，開新 session 時會抓'
   const only = at && at !== home
   const projects = index.projects
-    .filter(p => p.github && (!only || p.name === at))
+    .filter(p => p.github && g.repos?.[p.github] && (!only || p.name === at))  // 快取裡沒有這個 repo 的資料就不列
     .sort((a, b) => Number(b.name === at) - Number(a.name === at))
     .map(p => {
       const r = g.repos?.[p.github!]

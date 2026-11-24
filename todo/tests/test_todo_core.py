@@ -506,50 +506,83 @@ class GithubTests(Tmp):
 
     def test_gh_not_found_stops_after_first_call_and_records_error(self):
         calls = []
-        err = core.GhError("找不到 gh 指令", True)
+        err = core.GhError("gh 不存在", True)
         core.gh_update(self.conf(), self.dir, fake_gh(calls, {1: err}))
         self.assertEqual(len(calls), 1)
         cache = json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))
-        self.assertEqual(cache["error"], "找不到 gh 指令")
+        self.assertEqual(cache["error"], "gh 不存在")
         self.assertEqual(cache["mine"]["assigned"], [])
 
     def test_real_runner_maps_missing_timeout_nonzero_and_bad_json(self):
         import subprocess as sp
         from unittest import mock
 
-        with mock.patch.object(core.subprocess, "run", side_effect=FileNotFoundError()):
+        def run(**kw):
+            with mock.patch.object(core, "find_gh", return_value="/x/gh"), mock.patch.object(core.subprocess, "run", **kw):
+                with self.assertRaises(core.GhError) as c:
+                    core.run_gh(["x"])
+            return c.exception
+
+        with mock.patch.object(core, "find_gh", return_value=None):
             with self.assertRaises(core.GhError) as c:
                 core.run_gh(["x"])
-            self.assertTrue(c.exception.fatal)
-            self.assertIn("找不到 gh", str(c.exception))
-        with mock.patch.object(core.subprocess, "run", side_effect=sp.TimeoutExpired("gh", 10)):
-            with self.assertRaises(core.GhError) as c:
-                core.run_gh(["x"])
-            self.assertTrue(c.exception.fatal)
-            self.assertIn("逾時", str(c.exception))
-        bad = sp.CompletedProcess(["gh"], 4, b"", "gh auth login\n第二行".encode("utf-8"))
-        with mock.patch.object(core.subprocess, "run", return_value=bad):
-            with self.assertRaises(core.GhError) as c:
-                core.run_gh(["x"])
-            self.assertFalse(c.exception.fatal)
-            self.assertEqual(str(c.exception), "gh 結束碼 4：gh auth login")
-        junk = sp.CompletedProcess(["gh"], 0, b"<html>", b"")
-        with mock.patch.object(core.subprocess, "run", return_value=junk):
-            with self.assertRaisesRegex(core.GhError, "不是 JSON"):
-                core.run_gh(["x"])
+        self.assertEqual((str(c.exception), c.exception.fatal), ("gh 不存在", True))
+        e = run(side_effect=sp.TimeoutExpired("gh", 10))
+        self.assertEqual((str(e), e.fatal), ("gh 逾時", True))
+        e = run(return_value=sp.CompletedProcess(["gh"], 4, b"", "gh auth login\n第二行".encode("utf-8")))
+        self.assertEqual((str(e), e.fatal), ("gh 未登入", True))
+        e = run(return_value=sp.CompletedProcess(["gh"], 1, b"", b"HTTP 404"))
+        self.assertEqual((str(e), e.fatal), ("gh 結束碼 1", False))
+        e = run(return_value=sp.CompletedProcess(["gh"], 0, b"<html>", b""))
+        self.assertEqual(str(e), "gh 輸出不是 JSON")
+
+    def test_runner_runs_absolute_path_in_config_dir_and_never_stores_stderr(self):
+        import subprocess as sp
+        from unittest import mock
+        secret = "C:/Users/someone/secret/dir ghp_AbCdEf0123456789TOKENlooking"
+        seen = {}
+
+        def fake_run(argv, **kw):
+            seen.update(argv=argv, cwd=kw.get("cwd"))
+            return sp.CompletedProcess(argv, 1, b"stdout " + secret.encode(), secret.encode())
+
+        conf = self.conf()
+        with mock.patch.object(core, "find_gh", return_value="/abs/bin/gh"), mock.patch.object(core.subprocess, "run", fake_run):
+            core.gh_update(conf, self.dir, now=datetime(2026, 10, 18, 9, 0))
+        self.assertEqual(seen["argv"][0], "/abs/bin/gh")
+        self.assertEqual(seen["cwd"], str(self.dir))
+        cache_text = (self.dir / "gh_cache.json").read_text(encoding="utf-8")
+        idx = core.build(conf, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})
+        everything = cache_text + json.dumps(idx, ensure_ascii=False) + core.render(idx)
+        for leak in ("someone", "ghp_", "secret", "stdout"):
+            self.assertNotIn(leak, everything)
+        self.assertEqual(json.loads(cache_text)["error"], "gh 結束碼 1")
+
+    def test_find_gh_skips_empty_dot_and_cwd_entries(self):
+        exe = "gh.exe" if os.name == "nt" else "gh"
+        here, safe, evil = self.dir / "here", self.dir / "safe", self.dir / "evil"
+        for d in (here, safe, evil):
+            d.mkdir()
+            (d / exe).write_text("x")
+            (d / exe).chmod(0o755)
+        path = os.pathsep.join(["", ".", str(here), str(safe)])
+        env = {"PATH": path, "PATHEXT": ".EXE"}
+        self.assertEqual(os.path.normcase(core.find_gh(env, cwd=str(here))), os.path.normcase(str(safe / exe)))
+        self.assertIsNone(core.find_gh({"PATH": os.pathsep.join(["", ".", str(here)]), "PATHEXT": ".EXE"}, cwd=str(here)))
+        self.assertIsNone(core.find_gh({"PATH": ""}, cwd=str(here)))
 
     def test_timeout_and_nonzero_through_gh_update_are_recorded(self):
         calls = []
-        core.gh_update(self.conf(), self.dir, fake_gh(calls, {1: core.GhError("gh 逾時（10 秒）", True)}))
+        core.gh_update(self.conf(), self.dir, fake_gh(calls, {1: core.GhError("gh 逾時", True)}))
         self.assertEqual(len(calls), 1)
-        self.assertEqual(json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))["error"], "gh 逾時（10 秒）")
+        self.assertEqual(json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))["error"], "gh 逾時")
 
     def test_nonzero_exit_on_one_repo_keeps_other_data(self):
         calls = []
-        core.gh_update(self.conf(), self.dir, fake_gh(calls, {4: core.GhError("gh 結束碼 1：HTTP 404")}))
+        core.gh_update(self.conf(), self.dir, fake_gh(calls, {4: core.GhError("gh 結束碼 1")}))
         cache = json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))
         self.assertEqual(len(calls), 5)  # 非致命：同一個 repo 的 PR 照樣試
-        self.assertEqual(cache["error"], "gh 結束碼 1：HTTP 404")
+        self.assertEqual(cache["error"], "gh 結束碼 1")
         self.assertEqual(cache["repos"]["o/r"]["issues"], [])
         self.assertEqual(len(cache["repos"]["o/r"]["prs"]), 1)
         self.assertEqual(len(cache["mine"]["assigned"]), 1)
@@ -571,7 +604,7 @@ class GithubTests(Tmp):
         calls = []
         conf = self.conf()
         t0 = datetime(2026, 10, 18, 9, 0)
-        core.gh_update(conf, self.dir, fake_gh(calls, {1: core.GhError("找不到 gh 指令", True)}), t0)
+        core.gh_update(conf, self.dir, fake_gh(calls, {1: core.GhError("gh 不存在", True)}), t0)
         self.assertFalse(core.gh_update(conf, self.dir, fake_gh(calls), t0 + timedelta(minutes=1)))
         self.assertEqual(len(calls), 1)
 
@@ -582,9 +615,85 @@ class GithubTests(Tmp):
             r = subprocess.run([sys.executable, CORE, cmd], capture_output=True, env=env, stdin=subprocess.DEVNULL)
             self.assertEqual((r.returncode, r.stdout, r.stderr), (0, b"", b""))
         cache = json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8"))
-        self.assertEqual(cache["error"], "找不到 gh 指令")
+        self.assertEqual(cache["error"], "gh 不存在")
         idx = json.loads((self.dir / "todo_index.json").read_text(encoding="utf-8"))
-        self.assertEqual(idx["github"]["error"], "找不到 gh 指令")
+        self.assertEqual(idx["github"]["error"], "gh 不存在")
+
+    def test_other_github_identity_is_stale_and_never_shown(self):
+        from unittest import mock
+        conf = self.conf()
+        t0 = datetime(2026, 10, 18, 9, 0)
+        calls = []
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "token-of-account-a"}):
+            core.gh_update(conf, self.dir, fake_gh(calls), t0)
+            n = len(calls)
+            self.assertFalse(core.gh_update(conf, self.dir, fake_gh(calls), t0 + timedelta(minutes=1)))
+            self.assertEqual(core.build(conf, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})["github"]["mine"]["assigned"][0]["number"], 3)
+        cache_text = (self.dir / "gh_cache.json").read_text(encoding="utf-8")
+        self.assertNotIn("token-of-account-a", cache_text)
+        # 換 token：index、render 不顯示 A 的資料，也算過期要重抓
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "token-of-account-b"}):
+            idx = core.build(conf, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})
+            self.assertIsNone(idx["github"]["fetched"])
+            self.assertEqual(idx["github"]["mine"]["assigned"], [])
+            self.assertNotIn("搜尋到的", json.dumps(idx, ensure_ascii=False) + core.render(idx))
+            self.assertTrue(core.gh_update(conf, self.dir, fake_gh(calls), t0 + timedelta(minutes=2)))
+            self.assertEqual(len(calls), 2 * n)
+        # 換 GH_CONFIG_DIR 也一樣
+        with mock.patch.dict(os.environ, {"GH_TOKEN": "token-of-account-b", "GH_CONFIG_DIR": "/elsewhere"}):
+            self.assertNotEqual(core.gh_identity(), core.gh_identity({"GH_TOKEN": "token-of-account-b"}))
+            self.assertIsNone(core.build(conf, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})["github"]["fetched"])
+
+    def test_cache_for_removed_repo_is_not_merged(self):
+        calls = []
+        core.gh_update(self.conf(repo="o/a"), self.dir, fake_gh(calls), datetime(2026, 10, 18, 9, 0))
+        conf_b = self.conf(repo="o/b")
+        idx = core.build(conf_b, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})
+        self.assertEqual(idx["github"]["repos"], {})
+        self.assertEqual(idx["projects"][0]["github"], "o/b")
+        self.assertNotIn("o/a", json.dumps(idx["github"]["repos"]))
+        self.assertNotIn("o/a｜", core.render(idx))
+        self.assertNotIn("o/b：", core.render(idx))
+
+    def test_temp_file_is_unique_and_failed_replace_keeps_old_cache(self):
+        from unittest import mock
+        core.write_json({"v": 1}, self.dir, "gh_cache.json", direct_fallback=False)
+        names = []
+        real = os.replace
+
+        def spy(src, dst):
+            names.append(os.path.basename(src))
+            return real(src, dst)
+
+        with mock.patch.object(core.os, "replace", spy):
+            core.write_json({"v": 2}, self.dir, "gh_cache.json", direct_fallback=False)
+        self.assertIn(str(os.getpid()), names[0])
+        self.assertNotEqual(names[0], "gh_cache.json.tmp")
+        with mock.patch.object(core.os, "replace", side_effect=OSError("busy")):
+            core.write_json({"v": 3}, self.dir, "gh_cache.json", direct_fallback=False)
+        self.assertEqual(json.loads((self.dir / "gh_cache.json").read_text(encoding="utf-8")), {"v": 2})
+        self.assertEqual([p.name for p in self.dir.glob("*.tmp")], [])
+
+    def test_partial_or_invalid_cache_is_no_cache(self):
+        conf = self.conf()
+        for text in ('{"version": 1, "mine": {"assi', "", "[1, 2]", '{"version": 1, "mine": 5, "repos": []}'):
+            (self.dir / "gh_cache.json").write_text(text, encoding="utf-8")
+            idx = core.build(conf, TODAY, {"CLAUDE_CONFIG_DIR": str(self.dir)})
+            self.assertIsNone(idx["github"]["fetched"])
+            core.render(idx)
+
+    def test_per_call_timeout_is_remaining_budget_and_stops_under_one_second(self):
+        ticks = iter([0, 0, 36, 44.5])  # 起算、第 1、2、3 次呼叫前
+        seen = []
+        clock = lambda: next(ticks)  # noqa: E731
+
+        def runner(args, timeout):
+            seen.append(timeout)
+            return []
+
+        cache = core.gh_fetch(self.conf(), runner, datetime(2026, 10, 18, 9, 0), budget=45, clock=clock)
+        self.assertEqual(seen, [10, 9])  # 剩 45 秒取 10；剩 9 秒取 9；剩 0.5 秒不再呼叫
+        self.assertEqual(cache["error"], "gh 逾時")
 
     def test_index_without_cache_shows_never_fetched(self):
         conf = self.conf()

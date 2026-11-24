@@ -12,6 +12,7 @@
 只有 gh 會連網（呼叫 gh 指令）；index 與 render 只讀 gh_cache.json。
 """
 import fnmatch
+import hashlib
 import json
 import os
 import re
@@ -483,19 +484,47 @@ class GhError(Exception):
         self.fatal = fatal
 
 
-def run_gh(args, timeout=GH_CALL_TIMEOUT):
-    """呼叫 gh，回傳解析好的 JSON。任何失敗都丟 GhError，錯誤訊息只留短短一行。"""
+def find_gh(env=None, cwd=None):
+    """自己走一遍 PATH 找 gh 的絕對路徑：略過空項、`.` 和等於目前資料夾的項目，
+    免得 Windows 在目前資料夾撿到惡意的 gh.exe。Windows 照 PATHEXT 試副檔名。找不到回 None。"""
+    env = os.environ if env is None else env
+    here = os.path.normcase(os.path.abspath(cwd or os.getcwd()))
+    exts = [""]
+    if os.name == "nt":
+        exts = [e for e in (env.get("PATHEXT") or ".COM;.EXE;.BAT;.CMD").split(os.pathsep) if e]
+    for d in (env.get("PATH") or "").split(os.pathsep):
+        d = d.strip().strip('"')
+        if not d or d == ".":
+            continue
+        full = os.path.abspath(d)
+        if os.path.normcase(full) == here:
+            continue
+        for ext in exts:
+            cand = os.path.join(full, "gh" + ext)
+            if os.path.isfile(cand) and (os.name == "nt" or os.access(cand, os.X_OK)):
+                return cand
+    return None
+
+
+def run_gh(args, timeout=GH_CALL_TIMEOUT, cwd=None):
+    """呼叫 gh，回傳解析好的 JSON。任何失敗都丟 GhError，訊息只用固定類別，
+    絕不放 stderr／stdout 的內容（可能帶本機路徑或憑證）。cwd 是子行程的工作資料夾。"""
+    exe = find_gh()
+    if not exe:
+        raise GhError("gh 不存在", True)
     try:
-        r = subprocess.run(["gh"] + list(args), stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout)
+        r = subprocess.run([exe] + list(args), stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout, cwd=cwd)
     except FileNotFoundError:
-        raise GhError("找不到 gh 指令", True)
+        raise GhError("gh 不存在", True)
     except subprocess.TimeoutExpired:
-        raise GhError("gh 逾時（%d 秒）" % timeout, True)
-    except OSError as e:
-        raise GhError("gh 執行失敗：%s" % e, True)
+        raise GhError("gh 逾時", True)
+    except OSError:
+        raise GhError("gh 不存在", True)
     if r.returncode != 0:
-        err = r.stderr.decode("utf-8", errors="replace").strip().splitlines()
-        raise GhError("gh 結束碼 %d%s" % (r.returncode, "：" + err[0][:120] if err else ""))
+        err = r.stderr.decode("utf-8", errors="replace").lower()
+        if r.returncode == 4 or "gh auth login" in err or "not logged in" in err:
+            raise GhError("gh 未登入", True)
+        raise GhError("gh 結束碼 %d" % r.returncode)
     try:
         return json.loads(r.stdout.decode("utf-8", errors="replace"))
     except ValueError:
@@ -536,22 +565,31 @@ def gh_repos(conf):
     return seen
 
 
-def gh_fetch(conf, runner=run_gh, now=None, budget=GH_TOTAL_BUDGET):
+def gh_identity(env=None):
+    """這個行程用的是哪個 GitHub 身分，不連網：GH_CONFIG_DIR（沒設寫 default）加上
+    GH_TOKEN、GITHUB_TOKEN、GH_ENTERPRISE_TOKEN、GH_HOST 的 sha256。只存雜湊，不存 token。"""
+    env = os.environ if env is None else env
+    raw = "\0".join(env.get(k) or "" for k in ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GH_HOST"))
+    return "%s|%s" % (env.get("GH_CONFIG_DIR") or "default", hashlib.sha256(raw.encode("utf-8")).hexdigest())
+
+
+def gh_fetch(conf, runner=run_gh, now=None, budget=GH_TOTAL_BUDGET, clock=time.monotonic):
     """連網抓一次，回傳要寫進 gh_cache.json 的 dict。runner(args, timeout) 回傳 JSON，失敗丟 GhError；測試傳假的進來。"""
     now = now or datetime.now()
-    cache = {"version": GH_CACHE_VERSION, "fetched": now.isoformat(timespec="seconds"), "error": None,
+    cache = {"version": GH_CACHE_VERSION, "identity": gh_identity(), "fetched": now.isoformat(timespec="seconds"), "error": None,
              "mine": {"assigned": [], "prs": [], "review": []}, "repos": {}}
-    started = time.monotonic()
+    started = clock()
     state = {"stop": False}
 
     def call(args, fields):
         if state["stop"]:
             return None, None
-        if time.monotonic() - started > budget:
+        left = budget - (clock() - started)
+        if left < 1:
             state["stop"] = True
-            return None, "gh 總時間超過 %d 秒" % budget
+            return None, "gh 逾時"
         try:
-            return gh_rows(runner(args + ["--limit", str(GH_LIMIT), "--json", fields], GH_CALL_TIMEOUT)), None
+            return gh_rows(runner(args + ["--limit", str(GH_LIMIT), "--json", fields], min(GH_CALL_TIMEOUT, left))), None
         except GhError as e:
             state["stop"] = state["stop"] or e.fatal
             return None, str(e)
@@ -584,8 +622,8 @@ def read_gh_cache(base):
 
 
 def gh_fresh(cache, conf, now=None):
-    """快取沒過期、而且抓的 repo 跟設定一致，就不用連網。"""
-    if not cache:
+    """快取沒過期、抓的 repo 跟設定一致、而且是同一個 GitHub 身分，就不用連網。"""
+    if not cache or cache.get("identity") != gh_identity():
         return False
     try:
         age = ((now or datetime.now()) - datetime.fromisoformat(cache["fetched"])).total_seconds()
@@ -595,13 +633,16 @@ def gh_fresh(cache, conf, now=None):
     return same and 0 <= age < conf["github"]["ttlMinutes"] * 60
 
 
-def gh_update(conf, base, runner=run_gh, now=None):
+def gh_update(conf, base, runner=None, now=None):
     """gh 指令本體：沒開 github 就什麼都不做；快取新鮮就不呼叫 gh。回傳是否真的連了網。"""
     if not conf["github"]["enabled"]:
         return False
     if gh_fresh(read_gh_cache(base), conf, now):
         return False
-    write_json(gh_fetch(conf, runner, now), base, GH_CACHE_NAME)
+    if runner is None:
+        def runner(args, timeout):
+            return run_gh(args, timeout, cwd=str(base))
+    write_json(gh_fetch(conf, runner, now), base, GH_CACHE_NAME, direct_fallback=False)
     return True
 
 
@@ -610,9 +651,12 @@ def gh_index(conf, base):
     if not conf["github"]["enabled"]:
         return None
     cache = read_gh_cache(base) or {}
+    if cache.get("identity") != gh_identity():
+        cache = {}  # 別的 GitHub 身分抓的，不能顯示
     mine = cache.get("mine") if isinstance(cache.get("mine"), dict) else {}
     return {"enabled": True, "fetched": cache.get("fetched"), "error": cache.get("error"),
-            "mine": {k: list(mine.get(k) or []) for k, _ in GH_MINE}, "repos": cache.get("repos") or {}}
+            "mine": {k: list(mine.get(k) or []) for k, _ in GH_MINE},
+            "repos": {r: v for r, v in (cache.get("repos") or {}).items() if r in gh_repos(conf)}}
 
 
 # ---------- index ----------
@@ -702,10 +746,12 @@ def write_index(index, base):
     write_json(index, base, INDEX_NAME)
 
 
-def write_json(obj, base, name):
+def write_json(obj, base, name, direct_fallback=True):
+    """先寫成同資料夾裡每個行程獨有的暫存檔再 os.replace，同時開的 session 不會踩到彼此的暫存檔。
+    replace 一直失敗時：direct_fallback 為 True（index）直接寫目標檔；False（gh_cache.json）刪掉自己的暫存檔，留著舊快取。"""
     base.mkdir(parents=True, exist_ok=True)
     target = base / name
-    tmp = base / (name + ".tmp")
+    tmp = base / ("%s.%d.%s.tmp" % (name, os.getpid(), os.urandom(4).hex()))
     data = json.dumps(obj, ensure_ascii=False, indent=1)
     tmp.write_text(data, encoding="utf-8")
     for _ in range(5):
@@ -714,7 +760,8 @@ def write_json(obj, base, name):
             return
         except OSError:
             pass
-    target.write_text(data, encoding="utf-8")
+    if direct_fallback:
+        target.write_text(data, encoding="utf-8")
     try:
         tmp.unlink()
     except OSError:
@@ -803,8 +850,8 @@ def render(index, cwd=None):
     if gh:
         out += ["", "【GitHub】" + gh_summary(gh)]
         for p in projects:
-            if p.get("github"):
-                r = (gh.get("repos") or {}).get(p["github"]) or {}
+            r = (gh.get("repos") or {}).get(p.get("github") or "")
+            if r is not None:
                 out.append("- %s｜%s：issue %d、PR %d" % (p["name"], p["github"], len(r.get("issues") or []), len(r.get("prs") or [])))
     probs = index.get("problems", [])
     if probs:

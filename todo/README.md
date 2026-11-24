@@ -79,10 +79,10 @@
 
 - 跨 repo 的「我的」：`gh search issues --assignee=@me`、`gh search prs --assignee=@me`、`gh search prs --review-requested=@me`，各取開著的前 50 條。
 - 各專案：有 `projects[].github` 的，用 `gh issue list -R owner/repo` 與 `gh pr list -R owner/repo` 取開著的前 50 條。
-- `todo_core.py gh` 在 SessionStart 跑，把結果寫進設定資料夾的 `gh_cache.json`；快取比 `ttlMinutes` 新、而且 repo 清單沒變，就不連網。每次呼叫 `gh` 最多 10 秒，一次 `gh` 指令總共最多 45 秒。這個 hook 與 `index`、`render` 同時跑，所以第一次抓到的資料要到下一次 `index`（下一次送出提示）才出現。
+- `todo_core.py gh` 在 SessionStart 跑，把結果寫進設定資料夾的 `gh_cache.json`；快取比 `ttlMinutes` 新、而且 repo 清單沒變，就不連網。每次呼叫 `gh` 最多 10 秒（總預算 45 秒裡剩的比 10 秒少，就取剩的；剩不到 1 秒就不再呼叫，記為逾時）。快取也記著「哪個 GitHub 身分抓的」（`GH_CONFIG_DIR` 加上 `GH_TOKEN`、`GITHUB_TOKEN`、`GH_ENTERPRISE_TOKEN`、`GH_HOST` 的雜湊，不存 token 本身）；換了身分就視為過期，`index` 與開場清單也不顯示別的身分抓的資料。快取裡沒有某專案目前設定的 repo 時，那個專案不列 GitHub。這個 hook 與 `index`、`render` 同時跑，所以第一次抓到的資料要到下一次 `index`（下一次送出提示）才出現。
 - `index` 與 `render` 只讀 `gh_cache.json`，從不連網，所以不會拖慢送出提示。
 - 側欄「你」頁多一節「GitHub（我的）」，「專案」頁在設了 `github` 的專案底下列 issue 與 PR，旁邊一行淡色字標快取是多久前更新的。條目點了開網頁，側欄只讀不改，關 issue 之類仍在 GitHub 做。開場清單多一段「GitHub」，每個設了 `github` 的專案一行條數。
-- 沒裝 `gh`、沒登入、逾時、連不上、輸出不是 JSON：安靜跳過，`index` 的 stdout 一樣零輸出，錯誤字串記在 `gh_cache.json` 的 `error`，側欄顯示一行淡色說明。錯誤也算一次快取，所以沒裝 `gh` 時不會每次開 session 都重試。
+- 沒裝 `gh`、沒登入、逾時、連不上、輸出不是 JSON：安靜跳過，`index` 的 stdout 一樣零輸出，錯誤只記固定類別（gh 不存在、gh 未登入、gh 逾時、gh 結束碼 N、gh 輸出不是 JSON）在 `gh_cache.json` 的 `error`，不存 `gh` 輸出的任何文字，側欄顯示一行淡色說明。錯誤也算一次快取，所以沒裝 `gh` 時不會每次開 session 都重試。
 - 沒開 `github.enabled` 時，`todo_index.json` 跟沒有這個功能時逐位元相同。
 
 ## 讀哪些檔、寫哪些檔
@@ -162,7 +162,7 @@ TODO 條目的 `（計畫 檔名）` 欄位，或文字裡出現符合 `planGlob
 ## 安全
 
 - mod 在 Claude Code 的行程內執行，不受沙箱限制。這個 mod 只讀設定資料夾裡的兩個檔（`todo.config.json`、`todo_index.json`），讀的環境變數只有 `CLAUDE_CONFIG_DIR`、`HOME`、`USERPROFILE`、`WSL_DISTRO_NAME`，不寫檔、不連網、不開行程。`claude plugin validate ./todo` 會列出它實際呼叫的 API，可以自己核對。
-- 開了 GitHub 追蹤時，`todo_core.py gh` 會執行 `gh` 指令（用你自己登入的帳號，只讀 issue 與 PR，不寫），這是整個 plugin 唯一會連網的部分；不開就完全不執行。
+- 開了 GitHub 追蹤時，`todo_core.py gh` 會執行 `gh` 指令（用你自己登入的帳號，只讀 issue 與 PR，不寫），這是整個 plugin 唯一會連網的部分；不開就完全不執行。它自己走一遍 `PATH` 找 `gh` 的絕對路徑（略過空項、`.` 與目前資料夾），子行程的工作資料夾是設定資料夾，所以不會執行目前資料夾裡的 `gh.exe`。
 - Python 腳本照一般 command hook 的權限執行，讀寫範圍見上一節。
 
 ## 開發
