@@ -62,8 +62,9 @@ export type TodoConfig = {
   home?: string
   wslPrefix?: string
   projects?: { name: string; root: string; github?: string }[]
-  github?: { enabled?: boolean; ttlMinutes?: number }
-  // 側欄要顯示哪些版面、照什麼順序；不設就是四種全開
+  // collapse、dedupe 只影響獨立的 GitHub 頁，預設都是 true（寫 false 才關）；側欄直接讀設定檔，todo_core.py 不處理
+  github?: { enabled?: boolean; ttlMinutes?: number; collapse?: boolean; dedupe?: boolean }
+  // 側欄要顯示哪些版面、照什麼順序；不設就是四種全開（不含 github）
   views?: string[]
 }
 
@@ -81,8 +82,8 @@ export type PaneProject = {
 export type NextStep = { project: string; title: string; steps: string[] }
 export type GoalStep = { text: string; isDone: boolean }
 export type GoalSection = { name: string; done: number; total: number; steps?: GoalStep[] }
-// 側欄版面：mine 你要做的為主、project 照專案全展開、time 照期限、goal 計畫逐步。
-export type PaneView = 'mine' | 'project' | 'time' | 'goal'
+// 側欄版面：mine 你要做的為主、project 照專案全展開、time 照期限、goal 計畫逐步、github 獨立的 GitHub 頁（選用，views 有列才有）。
+export type PaneView = 'mine' | 'project' | 'time' | 'goal' | 'github'
 export type GoalTodo = { project: string; text: string; left?: number }
 // todos：寫了「併入 <計畫>」的條目，從各專案清單移到這裡；from：有條目指向這份計畫的專案。
 export type GoalPlan = {
@@ -102,6 +103,8 @@ export type PaneGithub = {
   mine: { label: string; rows: GhRow[] }[]
   projects: { name: string; repo: string; issues: GhRow[]; prs: GhRow[]; error?: string }[]
 }
+// 獨立 GitHub 頁的選項：collapse 專案一節預設只列標題行；dedupe 專案裡已在「我的」出現的條目不再列；at 是 session 所在專案（預設展開）。
+export type GhOpts = { collapse: boolean; dedupe: boolean; at?: string }
 // hint：沒有設定檔或 index 時，側欄只顯示這一行。
 export type PaneData = {
   date: string
@@ -110,12 +113,13 @@ export type PaneData = {
   projects: PaneProject[]
   hint?: string
   github?: PaneGithub
+  ghOpts?: GhOpts
   // 側欄顯示的版面（照順序，按鍵 1、2…）；沒有就是四種全開
   views?: PaneView[]
 }
 
 declare module 'claude-code' {
   interface PluginState {
-    todo: { pane: PaneData | null; isBandHidden: boolean; view: PaneView }
+    todo: { pane: PaneData | null; isBandHidden: boolean; view: PaneView; ghOpen: Record<string, boolean> }
   }
 }
