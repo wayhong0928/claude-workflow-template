@@ -127,6 +127,7 @@ class ConfigMissing(Exception):
 
 
 GH_REPO = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+GH_OWNER = re.compile(r"^[A-Za-z0-9-]+$")
 
 
 def github_repo(value):
@@ -136,11 +137,17 @@ def github_repo(value):
 
 
 def github_conf(raw):
-    """github 設定：enabled 預設 false；ttlMinutes 預設 10，不是正數就用預設。"""
+    """github 設定：enabled 預設 false；ttlMinutes 預設 10，不是正數就用預設；
+    owners 是「我的」那節只列哪些擁有者的 repo，不設或空清單就不篩（不分大小寫，不合格的名字略過）。"""
     raw = raw if isinstance(raw, dict) else {}
     ttl = raw.get("ttlMinutes")
     ok = isinstance(ttl, (int, float)) and not isinstance(ttl, bool) and ttl > 0
-    return {"enabled": raw.get("enabled") is True, "ttlMinutes": ttl if ok else GH_TTL_MINUTES}
+    owners = []
+    for o in raw.get("owners") if isinstance(raw.get("owners"), list) else []:
+        o = o.strip().lower() if isinstance(o, str) else ""
+        if GH_OWNER.match(o) and o not in owners:
+            owners.append(o)
+    return {"enabled": raw.get("enabled") is True, "ttlMinutes": ttl if ok else GH_TTL_MINUTES, "owners": sorted(owners)}
 
 
 def load_config(path=None, env=None):
@@ -557,6 +564,13 @@ GH_MINE = [
 ]
 
 
+def owner_ok(row, owners):
+    """有設 owners 時，只留擁有者在清單裡的；沒有 repo 欄位的一律不留。"""
+    if not owners:
+        return True
+    return str(row.get("repo") or "").split("/")[0].lower() in owners
+
+
 def gh_repos(conf):
     seen = []
     for p in conf["projects"]:
@@ -579,7 +593,8 @@ def gh_fetch(conf, runner=run_gh, now=None, budget=GH_TOTAL_BUDGET, clock=time.m
     """連網抓一次，回傳要寫進 gh_cache.json 的 dict。runner(args, timeout) 回傳 JSON，失敗丟 GhError；測試傳假的進來。"""
     now = now or datetime.now()
     cache = {"version": GH_CACHE_VERSION, "identity": gh_identity(), "fetched": now.isoformat(timespec="seconds"), "error": None,
-             "mine": {"assigned": [], "prs": [], "review": []}, "repos": {}}
+             "owners": conf["github"]["owners"], "mine": {"assigned": [], "prs": [], "review": []}, "repos": {}}
+    owners = conf["github"]["owners"]
     started = clock()
     state = {"stop": False}
 
@@ -601,8 +616,8 @@ def gh_fetch(conf, runner=run_gh, now=None, budget=GH_TOTAL_BUDGET, clock=time.m
             cache["error"] = msg
 
     for key, args in GH_MINE:
-        rows, err = call(args, SEARCH_FIELDS)
-        cache["mine"][key] = rows or []
+        rows, err = call(args + ["--owner=" + o for o in owners], SEARCH_FIELDS)
+        cache["mine"][key] = [r for r in rows or [] if owner_ok(r, owners)]
         note(err)
     for repo in gh_repos(conf):
         ent = {"issues": [], "prs": [], "error": None}
@@ -632,6 +647,7 @@ def gh_fresh(cache, conf, now=None):
     except (KeyError, TypeError, ValueError):
         return False
     same = sorted((cache.get("repos") or {}).keys()) == sorted(gh_repos(conf))
+    same = same and cache.get("owners", []) == conf["github"]["owners"]  # 改了 owners 要重抓
     return same and 0 <= age < conf["github"]["ttlMinutes"] * 60
 
 
@@ -657,7 +673,8 @@ def gh_index(conf, base):
         cache = {}  # 別的 GitHub 身分抓的，不能顯示
     mine = cache.get("mine") if isinstance(cache.get("mine"), dict) else {}
     return {"enabled": True, "fetched": cache.get("fetched"), "error": cache.get("error"),
-            "mine": {k: list(mine.get(k) or []) for k, _ in GH_MINE},
+            "mine": {k: [r for r in mine.get(k) or [] if isinstance(r, dict) and owner_ok(r, conf["github"]["owners"])]
+                     for k, _ in GH_MINE},
             "repos": {r: v for r, v in (cache.get("repos") or {}).items() if r in gh_repos(conf)}}
 
 

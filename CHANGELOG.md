@@ -1,5 +1,11 @@
 # 更新紀錄
 
+## 0.11.0（todo）
+
+測試過的 Claude Code 版本：2.1.331（Windows 11）。
+
+- `github.owners`：「我的」那節只列指定擁有者的 repo，搜尋時帶 `--owner`，抓回來與 `index` 讀快取時都再篩一次；改了 `owners` 視為快取過期。同一個 GitHub 帳號在別的組織也有指派、不想在這台機器的側欄看到時用。不設就跟 0.10.0 一樣。
+
 ## 0.10.0（todo）
 
 測試過的 Claude Code 版本：2.1.331（Windows 11）。
