@@ -6,6 +6,7 @@
 
 - 新增選用的獨立 GitHub 側欄分頁：`views` 列 `github`（短名「GitHub」，大小寫不拘）才有，例如 `["mine", "project", "github", "time", "goal"]`。頁裡是更新時間、「我的」三組與各專案的 issue、PR。
 - 有這一頁時，「你」頁的 GitHub 一節改成一行摘要（例如「GitHub：指派 issue 3、等我審 1（按 3 看）」），「專案」頁每個專案底下改成一行「GitHub owner/repo｜issue n、PR n（按 3 看）」；按鍵數字照實際顯示的順序。`/todo view github` 與 `/todo view <數字>` 都能切過去。
+- 獨立 GitHub 頁的兩個選項，都預設 `true`，寫 `false` 才關，只影響這一頁：`github.collapse` 讓每個專案一節預設只列標題行，按標題展開或收起（所在專案與只有一個專案時預設展開，展開狀態在側欄存續期間記住）；`github.dedupe` 讓專案一節略過已在「我的」三組出現的條目（以網址判斷），節末加一行「另有 n 條在上面『我的』」，標題條數不扣。兩個鍵由側欄直接讀 `todo.config.json`，`todo_core.py` 與 `todo_index.json` 不變。
 - 列了 `github` 但沒開 GitHub 追蹤（側欄資料沒有 github）時，這一頁不顯示。
 - 不列 `github`（含不設 `views`）時，畫面與 0.11.0 相同；開場清單與 `todo_index.json` 不變。
 ## 0.11.0（todo）

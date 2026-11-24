@@ -619,3 +619,91 @@ test('記住的版面是 github：設定改成沒列它時落回第一頁', asyn
   const ui = await mountPane($, on, ghTabFiles(GH(), ['mine', 'time']), 'github')
   expect((await ui.find({ type: 'Text', text: /你要做的/ }))?.text).toBe('你要做的（2）')
 })
+
+// ---- 獨立 GitHub 頁：專案一節收合（github.collapse）與略過「我的」已列的條目（github.dedupe） ----
+const GH2 = (more: Partial<NonNullable<TodoIndex['github']>> = {}): NonNullable<TodoIndex['github']> => GH({
+  repos: {
+    'o/r': {
+      issues: [
+        { number: 1, title: '專案 issue', url: 'https://github.com/o/r/issues/1', updated: '' },
+        { number: 3, title: '指派給我的', url: 'https://github.com/o/r/issues/3', updated: '' },
+      ],
+      prs: [{ number: 2, title: '專案 PR', url: 'https://github.com/o/r/pull/2', updated: '' }],
+      error: null,
+    },
+    'o/s': { issues: [{ number: 7, title: '另一專案 issue', url: 'https://github.com/o/s/issues/7', updated: '' }], prs: [], error: null },
+  },
+  ...more,
+})
+const gh2Files = (github: Record<string, unknown> = {}, two = true, g: TodoIndex['github'] = GH2()): Record<string, string> => {
+  const idx = withGh(g)
+  return {
+    '/cfg/todo.config.json': JSON.stringify({
+      home: 'notes',
+      views: GH_VIEWS,
+      github: { enabled: true, ...github },
+      projects: [
+        { name: 'notes', root: '~/projects/notes', todo: ['TODO.md'], github: 'o/r' },
+        ...(two ? [{ name: 'thesis', root: '~/projects/thesis', todo: ['TODO.md'], github: 'o/s' }] : []),
+      ],
+    }),
+    '/cfg/todo_index.json': JSON.stringify({ ...idx, projects: idx.projects.filter(p => two || p.name !== 'thesis').map(p => (p.name === 'thesis' ? { ...p, github: 'o/s' } : p)) }),
+  }
+}
+const OWN = 'o/r｜issue 2、PR 1'
+const OTHER = 'o/s｜issue 1、PR 0'
+
+test('GitHub 頁兩個專案：所在專案展開、其他專案預設只列標題行；按了展開並記住，再按收起', async ($, on) => {
+  const ui = await mountPane($, on, gh2Files(), 'github')
+  expect(await ui.find({ type: 'Button', text: `▾ ${OWN}` })).toBeTruthy()
+  expect(await ui.find({ type: 'Link', text: '#1 專案 issue' })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: `▸ ${OTHER}` })).toBeTruthy()
+  expect(await ui.find({ type: 'Link', text: '#7 另一專案 issue' })).toBe(undefined)
+  await ui.press({ key: 'gh-fold-thesis' })
+  expect(await ui.find({ type: 'Button', text: `▾ ${OTHER}` })).toBeTruthy()
+  expect((await ui.find({ type: 'Link', text: '#7 另一專案 issue' }))?.props.href).toBe('https://github.com/o/s/issues/7')
+  await ui.press({ key: 'gh-fold-notes' })
+  expect(await ui.find({ type: 'Button', text: `▸ ${OWN}` })).toBeTruthy()
+  expect(await ui.find({ type: 'Link', text: '#1 專案 issue' })).toBe(undefined)
+  // 展開狀態記在 atom：換到別頁再回來還是一樣
+  await ui.press({ key: 'view-time' })
+  await ui.press({ key: 'view-github' })
+  expect(await ui.find({ type: 'Button', text: `▾ ${OTHER}` })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: `▸ ${OWN}` })).toBeTruthy()
+})
+
+test('github.collapse 寫 false：全部展開，標題不是按鈕', async ($, on) => {
+  const ui = await mountPane($, on, gh2Files({ collapse: false }), 'github')
+  expect(await ui.find({ type: 'Text', text: OWN })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: OTHER })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: /o\/[rs]｜/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Link', text: '#7 另一專案 issue' })).toBeTruthy()
+  expect(await ui.find({ type: 'Link', text: '#1 專案 issue' })).toBeTruthy()
+})
+
+test('GitHub 頁只有一個專案：預設就展開，標題不是按鈕', async ($, on) => {
+  const ui = await mountPane($, on, gh2Files({}, false), 'github')
+  expect(await ui.find({ type: 'Text', text: OWN })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: /o\/r｜/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Link', text: '#1 專案 issue' })).toBeTruthy()
+})
+
+test('github.dedupe：已在「我的」的條目不再列，節末一行「另有 n 條」，標題條數不扣', async ($, on) => {
+  const ui = await mountPane($, on, gh2Files(), 'github')
+  expect(await ui.find({ type: 'Link', text: /^#3 指派給我的$/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Link', text: 'o/r#3 指派給我的' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '  另有 1 條在上面「我的」' })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: `▾ ${OWN}` })).toBeTruthy()
+})
+
+test('github.dedupe 沒有重複的條目：不出「另有 n 條」', async ($, on) => {
+  const ui = await mountPane($, on, gh2Files({}, true, GH2({ mine: { assigned: [], prs: [], review: [] } })), 'github')
+  expect(await ui.find({ type: 'Link', text: /^#3 指派給我的$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /另有/ })).toBe(undefined)
+})
+
+test('github.dedupe 寫 false：照列，沒有「另有 n 條」', async ($, on) => {
+  const ui = await mountPane($, on, gh2Files({ dedupe: false }), 'github')
+  expect(await ui.find({ type: 'Link', text: /^#3 指派給我的$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /另有/ })).toBe(undefined)
+})

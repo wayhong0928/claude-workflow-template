@@ -54,6 +54,8 @@
 | `planGlob` | `計畫_*.md` | goal 計畫檔的檔名樣式 |
 | `github.enabled` | `false` | 設 `true` 才追蹤 GitHub，見下面「GitHub 追蹤」。不開就完全不呼叫 `gh` |
 | `github.ttlMinutes` | 10 | `gh_cache.json` 幾分鐘內算新鮮，新鮮就不連網 |
+| `github.collapse` | `true` | 只影響獨立的 GitHub 頁（`views` 列 `github`）。預設每個專案一節只顯示標題行「owner/repo｜issue n、PR n」，按標題展開或收起；session 所在的專案預設展開，只有一個專案時也展開。接了很多 repo、頁面太長時留著；想一眼看到全部內容、不想多按一下就設 `false`，全部展開 |
+| `github.dedupe` | `true` | 只影響獨立的 GitHub 頁。專案那一節裡，已經出現在上面「我的」三組的條目（以網址判斷）不再列，節末改寫一行「另有 n 條在上面『我的』」，標題的條數仍是總數。想在每個專案底下看到完整清單（例如要對照專案條數）就設 `false`，照列 |
 | `github.owners` | 不設 | 「我的」那節只列這些擁有者（帳號或組織）的 repo，例如 `["my-name"]`；同一個 GitHub 帳號也在別的組織有指派、不想在這台機器看到時用。不設就不篩 |
 | `views` | 四種全開 | 側欄顯示哪些版面、照什麼順序。寫代號 `mine`、`project`、`time`、`goal`，也認分頁上的短名稱「你」「專案」「時間」「Goal」，例如 `["mine", "goal"]`；按鍵照這個順序編 1、2…。不認得的值會略過，全部不認得就四種全開。另有選用的代號 `github`（短名「GitHub」，大小寫不拘）：獨立的 GitHub 頁，預設不在裡面，要自己列進去，見「GitHub 追蹤」 |
 | `projects[].name` | 資料夾名 | 顯示用的專案名 |
@@ -84,7 +86,7 @@
 - `index` 與 `render` 只讀 `gh_cache.json`，從不連網，所以不會拖慢送出提示。
 - 側欄有兩種擺法，GitHub 頁是選項，不設就是第一種。條目點了開網頁，側欄只讀不改，關 issue 之類仍在 GitHub 做。開場清單多一段「GitHub」，每個設了 `github` 的專案一行條數，與下面選哪一種無關。
   - 混在原有頁面（預設，`views` 不列 `github`）：「你」頁多一節「GitHub（我的）」，「專案」頁在設了 `github` 的專案底下列 issue 與 PR，旁邊一行淡色字標快取是多久前更新的。
-  - 獨立一頁（選用，`views` 列 `github`）：例如 `"views": ["mine", "project", "github", "time", "goal"]`，GitHub 頁排第 3，按 3 看。頁裡是更新時間、「我的」三組（指派給我的 issue、指派給我的 PR、等我審的 PR，空的略過），接著每個設了 `github` 的專案一節。「你」頁那一節換成一行摘要，例如「GitHub：指派 issue 3、等我審 1（按 3 看）」（0 的不寫，全為 0 就沒有這行）；「專案」頁每個專案底下換成一行「GitHub owner/repo｜issue 1、PR 2（按 3 看）」。按鍵數字照實際顯示的順序。`/todo view github` 或 `/todo view 3` 也能切過去。
+  - 獨立一頁（選用，`views` 列 `github`）：例如 `"views": ["mine", "project", "github", "time", "goal"]`，GitHub 頁排第 3，按 3 看。頁裡是更新時間、「我的」三組（指派給我的 issue、指派給我的 PR、等我審的 PR，空的略過），接著每個設了 `github` 的專案一節。「你」頁那一節換成一行摘要，例如「GitHub：指派 issue 3、等我審 1（按 3 看）」（0 的不寫，全為 0 就沒有這行）；「專案」頁每個專案底下換成一行「GitHub owner/repo｜issue 1、PR 2（按 3 看）」。按鍵數字照實際顯示的順序。`/todo view github` 或 `/todo view 3` 也能切過去。專案那幾節預設收合、並略過「我的」已列的條目，可用 `github.collapse`、`github.dedupe` 關掉（見上面的設定表，兩個都不影響混在原有頁面的擺法）。
   - `views` 列了 `github` 但沒開 `github.enabled`（或快取還沒有資料）時，這一頁不顯示，其餘頁照實際順序編號。
 - 沒裝 `gh`、沒登入、逾時、連不上、輸出不是 JSON：安靜跳過，`index` 的 stdout 一樣零輸出，錯誤只記固定類別（gh 不存在、gh 未登入、gh 逾時、gh 結束碼 N、gh 輸出不是 JSON）在 `gh_cache.json` 的 `error`，不存 `gh` 輸出的任何文字，側欄顯示一行淡色說明。錯誤也算一次快取，所以沒裝 `gh` 時不會每次開 session 都重試。
 - 沒開 `github.enabled` 時，`todo_index.json` 跟沒有這個功能時逐位元相同。

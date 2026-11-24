@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { GhRow, PaneData, PaneView, TodoConfig, TodoIndex } from '../types'
+import type { GhOpts, GhRow, PaneData, PaneView, TodoConfig, TodoIndex } from '../types'
 import {
   HINT,
   hintData,
@@ -39,6 +39,8 @@ const VIEWS: [PaneView, string][] = [['mine', '你'], ['project', '專案'], ['t
 // github 頁是選用的：只有 todo.config.json 的 views 有列、而且側欄資料有 github 時才出現，不在預設四頁裡
 const ALL_VIEWS: [PaneView, string][] = [...VIEWS, ['github', 'GitHub']]
 const view = atom({ plugin: 'todo', key: 'view' } as const, 'mine' as PaneView)
+// GitHub 頁每個專案一節的展開狀態，只記按過的（專案名 → 是否展開），沒按過的照預設
+const ghOpen = atom({ plugin: 'todo', key: 'ghOpen' } as const, {} as Record<string, boolean>)
 // list 是側欄實際顯示的版面，按鍵數字照它的順序
 export const viewOf = (s: unknown, list = VIEWS): PaneView | undefined => {
   const t = typeof s === 'string' ? s.toLowerCase() : s
@@ -58,7 +60,7 @@ const GROUP_NAME: Record<string, string> = { 你: '你的待辦', Claude: 'Claud
 const WHO: Record<string, string> = { 待你決定: '決定', 等外部: '等' }
 
 // 最近一次讀到的 index 與設定；自動完成和輸入框提示只讀這份，不在打字時讀檔。
-type Loaded = { index: TodoIndex; at: string | undefined; home: string | undefined; views: PaneView[] }
+type Loaded = { index: TodoIndex; at: string | undefined; home: string | undefined; views: PaneView[]; ghOpts: GhOpts }
 let loaded: Loaded | null = null
 let counts = new Map<string, Summary>()
 
@@ -159,6 +161,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Button, Link, Text } = $.ui.resolve(e)
     const d = await read($, pane)
+    const opened = await read($, ghOpen)
     if (!d) return <Text dimColor>讀取 TODO 中…</Text>
     if (d.hint) return <Text dimColor>{d.hint}</Text>
     // 只顯示設定的版面；記住的版面被設定拿掉了就用第一個。key 是該版面的按鍵，沒顯示就是 undefined
@@ -360,6 +363,10 @@ export const register: Register = on => {
     const githubView = () => {
       const g = d.github
       if (!g) return null
+      const opts = d.ghOpts ?? { collapse: true, dedupe: true }
+      const mineUrls = new Set(g.mine.flatMap(m => m.rows.map(r => r.url)))
+      // 只有一個專案時不收合；所在專案預設展開；按過的照按的
+      const foldable = opts.collapse && g.projects.length > 1
       return (
         <Box flexDirection="column">
           {ghNote}
@@ -369,14 +376,27 @@ export const register: Register = on => {
               {linkRows(`gm-${m.label}`, m.rows)}
             </Box>
           ))}
-          {g.projects.map(p => (
-            <Box key={`gp-${p.name}`} flexDirection="column" marginTop={1}>
-              <Text bold>{`${p.repo}｜issue ${p.issues.length}、PR ${p.prs.length}`}</Text>
-              {p.error && <Text dimColor wrap="truncate-end">{`  略過：${p.error}`}</Text>}
-              {linkRows(`gi-${p.name}`, p.issues)}
-              {linkRows(`gr-${p.name}`, p.prs.map(r => ({ ...r, text: `PR ${r.text}` })))}
-            </Box>
-          ))}
+          {g.projects.map(p => {
+            const title = `${p.repo}｜issue ${p.issues.length}、PR ${p.prs.length}`
+            const isOpen = !foldable || (opened[p.name] ?? p.name === d.ghOpts?.at)
+            const keep = (rows: GhRow[]) => (opts.dedupe ? rows.filter(r => !mineUrls.has(r.url)) : rows)
+            const issues = keep(p.issues)
+            const prs = keep(p.prs)
+            const skipped = p.issues.length + p.prs.length - issues.length - prs.length
+            return (
+              <Box key={`gp-${p.name}`} flexDirection="column" marginTop={1}>
+                {foldable ? (
+                  <Button key={`gh-fold-${p.name}`} label={`${isOpen ? '▾' : '▸'} ${title}`} plain onPress={() => update($, ghOpen, s => ({ ...s, [p.name]: !isOpen }))} />
+                ) : (
+                  <Text bold>{title}</Text>
+                )}
+                {isOpen && p.error && <Text dimColor wrap="truncate-end">{`  略過：${p.error}`}</Text>}
+                {isOpen && linkRows(`gi-${p.name}`, issues)}
+                {isOpen && linkRows(`gr-${p.name}`, prs.map(r => ({ ...r, text: `PR ${r.text}` })))}
+                {isOpen && skipped > 0 && <Text dimColor>{`  另有 ${skipped} 條在上面「我的」`}</Text>}
+              </Box>
+            )
+          })}
         </Box>
       )
     }
@@ -479,7 +499,9 @@ export async function load($: EngineInterface): Promise<Loaded | null> {
   const index = await readJson<TodoIndex>($, `${dir}/${INDEX}`)
   if (!conf || !index || !Array.isArray(index.projects)) return null
   const at = projectOf(await $.session.cwd().catch(() => ''), rootsOf(conf, { home, isWsl }))
-  return { index, at, home: conf.home ?? index.home ?? index.projects[0]?.name, views: viewsOf(conf.views).map(x => x[0]) }
+  // collapse、dedupe 預設 true，只有寫 false 才關；直接讀設定檔，不經 index
+  const ghOpts: GhOpts = { collapse: conf.github?.collapse !== false, dedupe: conf.github?.dedupe !== false, at }
+  return { index, at, home: conf.home ?? index.home ?? index.projects[0]?.name, views: viewsOf(conf.views).map(x => x[0]), ghOpts }
 }
 
 async function readJson<T>($: EngineInterface, path: string): Promise<T | null> {
@@ -493,7 +515,7 @@ async function readJson<T>($: EngineInterface, path: string): Promise<T | null> 
 }
 
 export function dataOf(l: Loaded | null, t: Date, now: Date): PaneData {
-  return l ? { ...paneData(l.index, t, l.at, l.home, now), views: l.views } : hintData(now)
+  return l ? { ...paneData(l.index, t, l.at, l.home, now), views: l.views, ghOpts: l.ghOpts } : hintData(now)
 }
 
 async function refresh($: EngineInterface) {

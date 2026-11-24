@@ -62,7 +62,8 @@ export type TodoConfig = {
   home?: string
   wslPrefix?: string
   projects?: { name: string; root: string; github?: string }[]
-  github?: { enabled?: boolean; ttlMinutes?: number }
+  // collapse、dedupe 只影響獨立的 GitHub 頁，預設都是 true（寫 false 才關）；側欄直接讀設定檔，todo_core.py 不處理
+  github?: { enabled?: boolean; ttlMinutes?: number; collapse?: boolean; dedupe?: boolean }
   // 側欄要顯示哪些版面、照什麼順序；不設就是四種全開（不含 github）
   views?: string[]
 }
@@ -102,6 +103,8 @@ export type PaneGithub = {
   mine: { label: string; rows: GhRow[] }[]
   projects: { name: string; repo: string; issues: GhRow[]; prs: GhRow[]; error?: string }[]
 }
+// 獨立 GitHub 頁的選項：collapse 專案一節預設只列標題行；dedupe 專案裡已在「我的」出現的條目不再列；at 是 session 所在專案（預設展開）。
+export type GhOpts = { collapse: boolean; dedupe: boolean; at?: string }
 // hint：沒有設定檔或 index 時，側欄只顯示這一行。
 export type PaneData = {
   date: string
@@ -110,12 +113,13 @@ export type PaneData = {
   projects: PaneProject[]
   hint?: string
   github?: PaneGithub
+  ghOpts?: GhOpts
   // 側欄顯示的版面（照順序，按鍵 1、2…）；沒有就是四種全開
   views?: PaneView[]
 }
 
 declare module 'claude-code' {
   interface PluginState {
-    todo: { pane: PaneData | null; isBandHidden: boolean; view: PaneView }
+    todo: { pane: PaneData | null; isBandHidden: boolean; view: PaneView; ghOpen: Record<string, boolean> }
   }
 }
