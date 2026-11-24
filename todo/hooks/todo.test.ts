@@ -532,3 +532,90 @@ test('側欄 GitHub 抓取失敗：只多一行淡色說明', async ($, on) => {
   expect((await ui.find({ type: 'Text', text: /GitHub 還沒抓到/ }))?.text).toBe('GitHub 還沒抓到：找不到 gh 指令')
   expect(await ui.find({ type: 'Link' })).toBe(undefined)
 })
+
+// ---- 獨立的 GitHub 頁（選用，views 列 github 才有） ----
+const GH_VIEWS = ['mine', 'project', 'github', 'time', 'goal']
+const ghTabFiles = (g: TodoIndex['github'] | undefined, views?: string[]): Record<string, string> => ({
+  '/cfg/todo.config.json': JSON.stringify({ home: 'notes', ...(views ? { views } : {}), projects: [{ name: 'notes', root: '~/projects/notes', todo: ['TODO.md'], github: 'o/r' }] }),
+  '/cfg/todo_index.json': JSON.stringify(withGh(g)),
+})
+
+test('views 認 github（大小寫不拘）；沒開 GitHub 追蹤就當沒列；不設 views 預設不含 GitHub', () => {
+  expect(viewsOf(['mine', 'GitHub', 'time']).map(x => x[0])).toEqual(['mine', 'github', 'time'])
+  expect(viewsOf(['GITHUB']).map(x => x[0])).toEqual(['github'])
+  expect(viewsOf(['mine', 'github'], false).map(x => x[0])).toEqual(['mine'])
+  expect(viewsOf(undefined).map(x => x[0])).toEqual(['mine', 'project', 'time', 'goal'])
+  expect(viewOf('github')).toBe(undefined)
+  expect(viewOf('5')).toBe(undefined)
+})
+
+test('views 列 github：第 3 頁是 GitHub，「你」與「專案」只剩一行摘要，按鍵數字照實際位置', async ($, on) => {
+  const ui = await mountPane($, on, ghTabFiles(GH(), GH_VIEWS))
+  expect(await ui.find({ type: 'Text', text: /按 1～5 換版面/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', text: 'GitHub' })).toBeTruthy()
+  // 「你」頁：整節 GitHub（我的）換成一行摘要
+  expect((await ui.find({ type: 'Text', text: /^GitHub：/ }))?.text).toBe('GitHub：指派 issue 1、等我審 1（按 3 看）')
+  expect(await ui.find({ type: 'Text', text: /GitHub（我的）/ })).toBe(undefined)
+  expect(await ui.find({ type: 'Link' })).toBe(undefined)
+  // 「專案」頁：只剩一行，沒有連結
+  await ui.press({ key: 'view-project' })
+  expect(await ui.find({ type: 'Text', text: 'GitHub o/r｜issue 1、PR 1（按 3 看）' })).toBeTruthy()
+  expect(await ui.find({ type: 'Link' })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /^GitHub .+前更新$/ })).toBe(undefined)
+  // GitHub 頁：更新時間、我的兩組、專案一節
+  await ui.press({ key: 'view-github' })
+  expect(await ui.find({ type: 'Text', text: /^GitHub .+前更新$/ })).toBeTruthy()
+  expect((await ui.find({ type: 'Text', text: /^指派給我的 issue/ }))?.text).toBe('指派給我的 issue（1）')
+  expect(await ui.find({ type: 'Text', text: '等我審的 PR（1）' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'o/r｜issue 1、PR 1' })).toBeTruthy()
+  expect((await ui.find({ type: 'Link', text: 'o/r#9 等我審' }))?.props.href).toBe('https://github.com/o/r/pull/9')
+  expect((await ui.find({ type: 'Link', text: 'PR #2 專案 PR' }))?.props.href).toBe('https://github.com/o/r/pull/2')
+  expect(await ui.find({ type: 'Text', text: /你要做的/ })).toBe(undefined)
+})
+
+test('views 列 github 但把它排在第 2 頁：摘要的按鍵跟著變', async ($, on) => {
+  const ui = await mountPane($, on, ghTabFiles(GH(), ['mine', 'github']))
+  expect((await ui.find({ type: 'Text', text: /^GitHub：/ }))?.text).toBe('GitHub：指派 issue 1、等我審 1（按 2 看）')
+})
+
+test('views 列 github，但我的三組全為 0：「你」頁不出摘要行', async ($, on) => {
+  const ui = await mountPane($, on, ghTabFiles(GH({ mine: { assigned: [], prs: [], review: [] } }), GH_VIEWS))
+  expect(await ui.find({ type: 'Text', text: /^GitHub：/ })).toBe(undefined)
+})
+
+test('沒列 github：沒有 GitHub 頁，「你」與「專案」跟 0.11.0 一樣', async ($, on) => {
+  const ui = await mountPane($, on, ghTabFiles(GH()))
+  expect(await ui.find({ type: 'Button', text: 'GitHub' })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /按 1～4 換版面/ })).toBeTruthy()
+  expect((await ui.find({ type: 'Text', text: /GitHub（我的）/ }))?.text).toBe('GitHub（我的）（2）')
+  expect(await ui.find({ type: 'Text', text: /^GitHub：/ })).toBe(undefined)
+  await ui.press({ key: 'view-project' })
+  expect(await ui.find({ type: 'Text', text: 'GitHub o/r｜issue 1、PR 1' })).toBeTruthy()
+  expect((await ui.find({ type: 'Link', text: 'PR #2 專案 PR' }))?.props.href).toBe('https://github.com/o/r/pull/2')
+})
+
+test('列了 github 但沒開 GitHub 追蹤：GitHub 頁不出現，其餘頁照實際順序編號', async ($, on) => {
+  const ui = await mountPane($, on, ghTabFiles(undefined, GH_VIEWS))
+  expect(await ui.find({ type: 'Button', text: 'GitHub' })).toBe(undefined)
+  expect(await ui.find({ type: 'Text', text: /按 1～4 換版面/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /GitHub/ })).toBe(undefined)
+  const ran = await $.command.run({ command: 'todo', args: 'view github', origin: { kind: 'plugin', name: 'todo' } } as Parameters<typeof $.command.run>[0])
+  expect(ran.text).toBe('版面有 1 你（mine）、2 專案（project）、3 時間（time）、4 Goal（goal），例如 /todo view 2')
+})
+
+test('/todo view github 與 /todo view 3 都能切到 GitHub 頁，並記住', async ($, on) => {
+  const ui = await mountPane($, on, ghTabFiles(GH(), GH_VIEWS))
+  const run = (args: string) => $.command.run({ command: 'todo', args, origin: { kind: 'plugin', name: 'todo' } } as Parameters<typeof $.command.run>[0])
+  expect((await run('view github')).text).toBe('TODO 側欄改用「GitHub」版面')
+  expect(await ui.find({ type: 'Text', text: 'o/r｜issue 1、PR 1' })).toBeTruthy()
+  await run('view 1')
+  expect(await ui.find({ type: 'Text', text: 'o/r｜issue 1、PR 1' })).toBe(undefined)
+  expect((await run('view 3')).text).toBe('TODO 側欄改用「GitHub」版面')
+  expect(await ui.find({ type: 'Text', text: 'o/r｜issue 1、PR 1' })).toBeTruthy()
+  expect((await run('view GitHub')).text).toBe('TODO 側欄改用「GitHub」版面')
+})
+
+test('記住的版面是 github：設定改成沒列它時落回第一頁', async ($, on) => {
+  const ui = await mountPane($, on, ghTabFiles(GH(), ['mine', 'time']), 'github')
+  expect((await ui.find({ type: 'Text', text: /你要做的/ }))?.text).toBe('你要做的（2）')
+})

@@ -55,7 +55,7 @@
 | `github.enabled` | `false` | 設 `true` 才追蹤 GitHub，見下面「GitHub 追蹤」。不開就完全不呼叫 `gh` |
 | `github.ttlMinutes` | 10 | `gh_cache.json` 幾分鐘內算新鮮，新鮮就不連網 |
 | `github.owners` | 不設 | 「我的」那節只列這些擁有者（帳號或組織）的 repo，例如 `["my-name"]`；同一個 GitHub 帳號也在別的組織有指派、不想在這台機器看到時用。不設就不篩 |
-| `views` | 四種全開 | 側欄顯示哪些版面、照什麼順序。寫代號 `mine`、`project`、`time`、`goal`，也認分頁上的短名稱「你」「專案」「時間」「Goal」，例如 `["mine", "goal"]`；按鍵照這個順序編 1、2…。不認得的值會略過，全部不認得就四種全開 |
+| `views` | 四種全開 | 側欄顯示哪些版面、照什麼順序。寫代號 `mine`、`project`、`time`、`goal`，也認分頁上的短名稱「你」「專案」「時間」「Goal」，例如 `["mine", "goal"]`；按鍵照這個順序編 1、2…。不認得的值會略過，全部不認得就四種全開。另有選用的代號 `github`（短名「GitHub」，大小寫不拘）：獨立的 GitHub 頁，預設不在裡面，要自己列進去，見「GitHub 追蹤」 |
 | `projects[].name` | 資料夾名 | 顯示用的專案名 |
 | `projects[].root` | 必填 | 專案資料夾，可以寫 `~` |
 | `projects[].todo` | `["TODO.md"]` | TODO 檔，相對 `root`；可以列好幾個 |
@@ -82,7 +82,10 @@
 - 各專案：有 `projects[].github` 的，用 `gh issue list -R owner/repo` 與 `gh pr list -R owner/repo` 取開著的前 50 條。
 - `todo_core.py gh` 在 SessionStart 跑，把結果寫進設定資料夾的 `gh_cache.json`；快取比 `ttlMinutes` 新、而且 repo 清單沒變，就不連網。每次呼叫 `gh` 最多 10 秒（總預算 45 秒裡剩的比 10 秒少，就取剩的；剩不到 1 秒就不再呼叫，記為逾時）。快取也記著「哪個 GitHub 身分抓的」（`GH_CONFIG_DIR` 加上 `GH_TOKEN`、`GITHUB_TOKEN`、`GH_ENTERPRISE_TOKEN`、`GH_HOST` 的雜湊，不存 token 本身）；換了身分就視為過期，`index` 與開場清單也不顯示別的身分抓的資料。快取裡沒有某專案目前設定的 repo 時，那個專案不列 GitHub。這個 hook 與 `index`、`render` 同時跑，所以第一次抓到的資料要到下一次 `index`（下一次送出提示）才出現。
 - `index` 與 `render` 只讀 `gh_cache.json`，從不連網，所以不會拖慢送出提示。
-- 側欄「你」頁多一節「GitHub（我的）」，「專案」頁在設了 `github` 的專案底下列 issue 與 PR，旁邊一行淡色字標快取是多久前更新的。條目點了開網頁，側欄只讀不改，關 issue 之類仍在 GitHub 做。開場清單多一段「GitHub」，每個設了 `github` 的專案一行條數。
+- 側欄有兩種擺法，GitHub 頁是選項，不設就是第一種。條目點了開網頁，側欄只讀不改，關 issue 之類仍在 GitHub 做。開場清單多一段「GitHub」，每個設了 `github` 的專案一行條數，與下面選哪一種無關。
+  - 混在原有頁面（預設，`views` 不列 `github`）：「你」頁多一節「GitHub（我的）」，「專案」頁在設了 `github` 的專案底下列 issue 與 PR，旁邊一行淡色字標快取是多久前更新的。
+  - 獨立一頁（選用，`views` 列 `github`）：例如 `"views": ["mine", "project", "github", "time", "goal"]`，GitHub 頁排第 3，按 3 看。頁裡是更新時間、「我的」三組（指派給我的 issue、指派給我的 PR、等我審的 PR，空的略過），接著每個設了 `github` 的專案一節。「你」頁那一節換成一行摘要，例如「GitHub：指派 issue 3、等我審 1（按 3 看）」（0 的不寫，全為 0 就沒有這行）；「專案」頁每個專案底下換成一行「GitHub owner/repo｜issue 1、PR 2（按 3 看）」。按鍵數字照實際顯示的順序。`/todo view github` 或 `/todo view 3` 也能切過去。
+  - `views` 列了 `github` 但沒開 `github.enabled`（或快取還沒有資料）時，這一頁不顯示，其餘頁照實際順序編號。
 - 沒裝 `gh`、沒登入、逾時、連不上、輸出不是 JSON：安靜跳過，`index` 的 stdout 一樣零輸出，錯誤只記固定類別（gh 不存在、gh 未登入、gh 逾時、gh 結束碼 N、gh 輸出不是 JSON）在 `gh_cache.json` 的 `error`，不存 `gh` 輸出的任何文字，側欄顯示一行淡色說明。錯誤也算一次快取，所以沒裝 `gh` 時不會每次開 session 都重試。
 - 沒開 `github.enabled` 時，`todo_index.json` 跟沒有這個功能時逐位元相同。
 

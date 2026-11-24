@@ -1,5 +1,13 @@
 # 更新紀錄
 
+## 0.12.0（todo）
+
+測試過的 Claude Code 版本：2.1.331（Windows 11）。
+
+- 新增選用的獨立 GitHub 側欄分頁：`views` 列 `github`（短名「GitHub」，大小寫不拘）才有，例如 `["mine", "project", "github", "time", "goal"]`。頁裡是更新時間、「我的」三組與各專案的 issue、PR。
+- 有這一頁時，「你」頁的 GitHub 一節改成一行摘要（例如「GitHub：指派 issue 3、等我審 1（按 3 看）」），「專案」頁每個專案底下改成一行「GitHub owner/repo｜issue n、PR n（按 3 看）」；按鍵數字照實際顯示的順序。`/todo view github` 與 `/todo view <數字>` 都能切過去。
+- 列了 `github` 但沒開 GitHub 追蹤（側欄資料沒有 github）時，這一頁不顯示。
+- 不列 `github`（含不設 `views`）時，畫面與 0.11.0 相同；開場清單與 `todo_index.json` 不變。
 ## 0.11.0（todo）
 
 測試過的 Claude Code 版本：2.1.331（Windows 11）。

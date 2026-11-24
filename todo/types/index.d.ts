@@ -63,7 +63,7 @@ export type TodoConfig = {
   wslPrefix?: string
   projects?: { name: string; root: string; github?: string }[]
   github?: { enabled?: boolean; ttlMinutes?: number }
-  // 側欄要顯示哪些版面、照什麼順序；不設就是四種全開
+  // 側欄要顯示哪些版面、照什麼順序；不設就是四種全開（不含 github）
   views?: string[]
 }
 
@@ -81,8 +81,8 @@ export type PaneProject = {
 export type NextStep = { project: string; title: string; steps: string[] }
 export type GoalStep = { text: string; isDone: boolean }
 export type GoalSection = { name: string; done: number; total: number; steps?: GoalStep[] }
-// 側欄版面：mine 你要做的為主、project 照專案全展開、time 照期限、goal 計畫逐步。
-export type PaneView = 'mine' | 'project' | 'time' | 'goal'
+// 側欄版面：mine 你要做的為主、project 照專案全展開、time 照期限、goal 計畫逐步、github 獨立的 GitHub 頁（選用，views 有列才有）。
+export type PaneView = 'mine' | 'project' | 'time' | 'goal' | 'github'
 export type GoalTodo = { project: string; text: string; left?: number }
 // todos：寫了「併入 <計畫>」的條目，從各專案清單移到這裡；from：有條目指向這份計畫的專案。
 export type GoalPlan = {
