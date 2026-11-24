@@ -19,6 +19,19 @@ export type IndexProject = {
   log: string | null
   items: IndexItem[]
   next: { title: string; steps: string[] } | null
+  // 只有 github.enabled 且該專案設了 github 才有，值是 owner/repo
+  github?: string
+}
+// gh_cache.json 的一筆 issue／PR；repo 只有跨 repo 搜尋（我的）才有
+export type IndexGhRow = { number: number; title: string; url: string; updated: string; repo?: string }
+export type IndexGithub = {
+  enabled: true
+  // 最後一次連網的時間（本機時間）；還沒抓過是 null
+  fetched: string | null
+  // 最近一次抓取的第一個錯誤；沒錯是 null
+  error: string | null
+  mine: { assigned: IndexGhRow[]; prs: IndexGhRow[]; review: IndexGhRow[] }
+  repos: Record<string, { issues: IndexGhRow[]; prs: IndexGhRow[]; error: string | null }>
 }
 export type IndexGoal = {
   id: string
@@ -38,6 +51,8 @@ export type TodoIndex = {
   home: string | null
   dueSoonDays: number
   projects: IndexProject[]
+  // 只有 github.enabled 才有這個鍵
+  github?: IndexGithub
   goals: IndexGoal[]
   expiring: { project: string; path: string; rel: string; due: string; left: number; after: string | null }[]
   problems: { file: string; line: number; kind: string; msg: string }[]
@@ -46,7 +61,8 @@ export type TodoIndex = {
 export type TodoConfig = {
   home?: string
   wslPrefix?: string
-  projects?: { name: string; root: string }[]
+  projects?: { name: string; root: string; github?: string }[]
+  github?: { enabled?: boolean; ttlMinutes?: number }
   // 側欄要顯示哪些版面、照什麼順序；不設就是四種全開
   views?: string[]
 }
@@ -79,6 +95,13 @@ export type GoalPlan = {
   from: string[]
   todos: GoalTodo[]
 }
+// GitHub 區塊：只有 index 有 github 才有。note 是側欄上那一行淡色說明（更新時間或錯誤）。
+export type GhRow = { text: string; url: string }
+export type PaneGithub = {
+  note: string
+  mine: { label: string; rows: GhRow[] }[]
+  projects: { name: string; repo: string; issues: GhRow[]; prs: GhRow[]; error?: string }[]
+}
 // hint：沒有設定檔或 index 時，側欄只顯示這一行。
 export type PaneData = {
   date: string
@@ -86,6 +109,7 @@ export type PaneData = {
   goals: GoalPlan[]
   projects: PaneProject[]
   hint?: string
+  github?: PaneGithub
   // 側欄顯示的版面（照順序，按鍵 1、2…）；沒有就是四種全開
   views?: PaneView[]
 }

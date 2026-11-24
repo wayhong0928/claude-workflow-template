@@ -1,8 +1,9 @@
 import type { PromptAutocompleteInput, PromptAutocompleteResult, PromptEditInput, PromptEditResult } from 'claude-code'
+import type { TestBody } from 'claude-code/testing'
 import { expect, test } from 'claude-code/testing'
 
 import type { IndexGoal, IndexItem, IndexProject, TodoIndex } from '../types'
-import { HINT, byProject, configDirOf, goalsOf, itemsOf, mineGroups, nextOf, paneData, projectOf, render, renderGoals, resolveRoot, rootsOf, splitView, summarize, timeView } from './view'
+import { HINT, ago, byProject, configDirOf, githubOf, goalsOf, itemsOf, mineGroups, nextOf, paneData, projectOf, render, renderGoals, resolveRoot, rootsOf, splitView, summarize, timeView } from './view'
 import { countsOf, hintFor, listAll, suggest, viewOf, viewsOf } from './register'
 
 // 解析在 scripts/todo_core.py（有自己的 unittest）；這裡只測「給 index、看畫面」。
@@ -435,4 +436,99 @@ test('設定 views 只開「你」與 Goal：頂端只有兩個按鍵，提示�
   expect(await ui.find({ type: 'Text', text: /你要做的/ })).toBe(undefined)
   const ran = await $.command.run({ command: 'todo', args: 'view project', origin: { kind: 'plugin', name: 'todo' } } as Parameters<typeof $.command.run>[0])
   expect(ran.text).toBe('版面有 1 你（mine）、2 Goal（goal），例如 /todo view 2')
+})
+
+// ---- GitHub（選用） ----
+const GH = (more: Partial<NonNullable<TodoIndex['github']>> = {}): NonNullable<TodoIndex['github']> => ({
+  enabled: true, fetched: '2026-10-18T08:50:00', error: null,
+  mine: {
+    assigned: [{ number: 3, title: '指派給我的', url: 'https://github.com/o/r/issues/3', updated: '', repo: 'o/r' }],
+    prs: [],
+    review: [{ number: 9, title: '等我審', url: 'https://github.com/o/r/pull/9', updated: '', repo: 'o/r' }],
+  },
+  repos: { 'o/r': { issues: [{ number: 1, title: '專案 issue', url: 'https://github.com/o/r/issues/1', updated: '' }], prs: [{ number: 2, title: '專案 PR', url: 'https://github.com/o/r/pull/2', updated: '' }], error: null } },
+  ...more,
+})
+const withGh = (g?: TodoIndex['github']): TodoIndex => ({
+  ...index([project('notes', [item('你', '甲')], { github: 'o/r' }), project('thesis', [item('你', '乙')])]),
+  ...(g ? { github: g } : {}),
+})
+const NOW = new Date(2026, 9, 18, 9, 0)
+
+test('GitHub：index 沒有 github 時，側欄資料完全沒有 github 這個鍵', () => {
+  const d = paneData(withGh(), today, 'notes', 'notes', NOW)
+  expect('github' in d).toBe(false)
+  expect(githubOf(withGh(), 'notes', 'notes', NOW)).toBe(undefined)
+})
+
+test('GitHub：有資料時列我的三組（空的略過）與專案的 issue、PR，連結原樣帶出，標更新時間', () => {
+  const g = paneData(withGh(GH()), today, 'notes', 'notes', NOW).github!
+  expect(g.note).toBe('GitHub 10 分鐘前更新')
+  expect(g.mine.map(m => m.label)).toEqual(['指派給我的 issue', '等我審的 PR'])
+  expect(g.mine[0]!.rows).toEqual([{ text: 'o/r#3 指派給我的', url: 'https://github.com/o/r/issues/3' }])
+  // thesis 沒設 github，不出現在專案清單
+  expect(g.projects).toEqual([{
+    name: 'notes', repo: 'o/r',
+    issues: [{ text: '#1 專案 issue', url: 'https://github.com/o/r/issues/1' }],
+    prs: [{ text: '#2 專案 PR', url: 'https://github.com/o/r/pull/2' }],
+  }])
+})
+
+test('GitHub：錯誤或還沒抓過時只多一行說明；在其他專案開 session 只列那個專案', () => {
+  expect(githubOf(withGh(GH({ error: '找不到 gh 指令', fetched: null, mine: { assigned: [], prs: [], review: [] }, repos: {} })), 'notes', 'notes', NOW)!.note)
+    .toBe('GitHub 還沒抓到：找不到 gh 指令')
+  expect(githubOf(withGh(GH({ fetched: null })), 'notes', 'notes', NOW)!.note).toContain('還沒抓過')
+  expect(githubOf(withGh(GH({ error: 'gh 逾時（10 秒）' })), 'notes', 'notes', NOW)!.note).toBe('GitHub 10 分鐘前更新，有略過：gh 逾時（10 秒）')
+  expect(githubOf(withGh(GH()), 'thesis', 'notes', NOW)!.projects).toEqual([])
+  // 設定改成別的 repo、快取裡沒有它的資料：這個專案什麼都不列
+  expect(githubOf(withGh(GH({ repos: {} })), 'notes', 'notes', NOW)!.projects).toEqual([])
+  expect(ago(new Date(2026, 9, 18, 6, 0), NOW)).toBe('3 小時前')
+  expect(ago(new Date(2026, 9, 16, 6, 0), NOW)).toBe('2 天前')
+})
+
+const ghFiles = (g?: TodoIndex['github']): Record<string, string> => ({
+  '/cfg/todo.config.json': JSON.stringify({ home: 'notes', projects: [{ name: 'notes', root: '~/projects/notes', todo: ['TODO.md'], github: 'o/r' }] }),
+  '/cfg/todo_index.json': JSON.stringify(withGh(g)),
+})
+async function mountPane($: Parameters<TestBody>[0], on: Parameters<TestBody>[1], files: Record<string, string>, saved?: string) {
+  on('fs.read', async (_$, e) => {
+    const p = e.path.split(String.fromCharCode(92)).join('/')
+    const hit = Object.keys(files).find(k => p.endsWith(k))
+    if (!hit) throw new Error('not found')
+    return { value: files[hit]! }
+  })
+  on('env.get', async (_$, e) => ({ value: e.name === 'CLAUDE_CONFIG_DIR' ? '/cfg' : e.name === 'HOME' ? '/home/u' : undefined }))
+  on('session.cwd', async () => ({ value: '/home/u/projects/notes' }))
+  on('store.get', async (_$, e) => ({ value: e.key === 'paneView' ? saved : undefined }))
+  on('store.set', async () => ({ value: undefined }))
+  on('command.register', async () => ({ value: { command: 'todo' } }))
+  on('ui.open', async () => ({ value: { isPlaced: true as const } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/home/u/projects/notes', surface: 'terminal', isInteractive: true })
+  return $.ui.mount({ plugin: 'todo', component: 'Pane', requestId: 'todo', surface: 'terminal', props: PANE_PROPS })
+}
+
+test('側欄有 GitHub 資料：「你」頁多一節 GitHub（我的），「專案」頁在專案底下列 issue 與 PR', async ($, on) => {
+  const ui = await mountPane($, on, ghFiles(GH()))
+  expect((await ui.find({ type: 'Text', text: /GitHub（我的）/ }))?.text).toBe('GitHub（我的）（2）')
+  expect(await ui.find({ type: 'Text', text: '指派給我的 issue（1）' })).toBeTruthy()
+  expect((await ui.find({ type: 'Link', text: 'o/r#3 指派給我的' }))?.props.href).toBe('https://github.com/o/r/issues/3')
+  // 側欄的更新時間用目前時間算，這裡只認格式
+  expect(await ui.find({ type: 'Text', text: /^GitHub .+前更新$/ })).toBeTruthy()
+  await ui.press({ key: 'view-project' })
+  expect(await ui.find({ type: 'Text', text: 'GitHub o/r｜issue 1、PR 1' })).toBeTruthy()
+  expect((await ui.find({ type: 'Link', text: 'PR #2 專案 PR' }))?.props.href).toBe('https://github.com/o/r/pull/2')
+})
+
+test('側欄沒有 GitHub 資料：兩頁都不出現任何 GitHub 字樣', async ($, on) => {
+  const ui = await mountPane($, on, ghFiles())
+  expect(await ui.find({ type: 'Text', text: /GitHub/ })).toBe(undefined)
+  await ui.press({ key: 'view-project' })
+  expect(await ui.find({ type: 'Text', text: /GitHub/ })).toBe(undefined)
+})
+
+test('側欄 GitHub 抓取失敗：只多一行淡色說明', async ($, on) => {
+  const ui = await mountPane($, on, ghFiles(GH({ fetched: null, error: '找不到 gh 指令', mine: { assigned: [], prs: [], review: [] }, repos: {} })))
+  expect((await ui.find({ type: 'Text', text: /GitHub 還沒抓到/ }))?.text).toBe('GitHub 還沒抓到：找不到 gh 指令')
+  expect(await ui.find({ type: 'Link' })).toBe(undefined)
 })
